@@ -1,0 +1,7 @@
+# E6 (Golikov): SIGMA-PPG fine-tune, PPG-only mode.
+defaults: [data/but_ppg]
+model:
+  name: sigma_ppg
+  mode: ppg_only
+  repo: ""                 # E6: pin the SIGMA-PPG repo commit here
+  pretrained_ckpt: ""      # link or path to the released checkpoint

@@ -1,0 +1,454 @@
+<title>BUT PPG — календарный план диссертации</title>
+<style>
+  :root {
+    --bg: #FBFAF7;
+    --panel: #FFFFFF;
+    --ink: #1B1E24;
+    --muted: #5C6470;
+    --faint: #8A929E;
+    --line: #E7E3DB;
+    --line-strong: #D6D1C6;
+    --grid-cell: #F4F1EA;
+    /* owners */
+    --g: #0E7C74;        /* Golikov — teal */
+    --g-bg: #E4F1EF;
+    --b: #B26A1B;        /* Budilov — amber */
+    --b-bg: #F5E9D6;
+    --s: #4B5566;        /* Shared — slate */
+    --s-bg: #E9EBEF;
+    --pulse: #C6414F;    /* HR accent */
+    --shadow: 0 1px 2px rgba(27,30,36,.04), 0 8px 24px rgba(27,30,36,.05);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101318; --panel: #171B22; --ink: #EDEEF1; --muted: #A2AAB6;
+      --faint: #6F7885; --line: #262B34; --line-strong: #333A45; --grid-cell: #1C2129;
+      --g: #38B7AD; --g-bg: #10312E; --b: #DA9B3F; --b-bg: #33260F;
+      --s: #98A2B3; --s-bg: #232833; --pulse: #E06576;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #101318; --panel: #171B22; --ink: #EDEEF1; --muted: #A2AAB6;
+    --faint: #6F7885; --line: #262B34; --line-strong: #333A45; --grid-cell: #1C2129;
+    --g: #38B7AD; --g-bg: #10312E; --b: #DA9B3F; --b-bg: #33260F;
+    --s: #98A2B3; --s-bg: #232833; --pulse: #E06576;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+  }
+  :root[data-theme="light"] {
+    --bg: #FBFAF7; --panel: #FFFFFF; --ink: #1B1E24; --muted: #5C6470;
+    --faint: #8A929E; --line: #E7E3DB; --line-strong: #D6D1C6; --grid-cell: #F4F1EA;
+    --g: #0E7C74; --g-bg: #E4F1EF; --b: #B26A1B; --b-bg: #F5E9D6;
+    --s: #4B5566; --s-bg: #E9EBEF; --pulse: #C6414F;
+    --shadow: 0 1px 2px rgba(27,30,36,.04), 0 8px 24px rgba(27,30,36,.05);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .wrap {
+    background: var(--bg); color: var(--ink); font-family: var(--sans);
+    line-height: 1.55; padding: clamp(20px, 4vw, 56px);
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1080px; margin: 0 auto; }
+
+  /* ---------- header ---------- */
+  header.hero { margin-bottom: 40px; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--pulse); margin: 0 0 14px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .eyebrow svg { display: block; }
+  h1 {
+    font-size: clamp(28px, 4.4vw, 46px); line-height: 1.06; margin: 0 0 14px;
+    letter-spacing: -.02em; text-wrap: balance; font-weight: 800;
+  }
+  .lede { font-size: clamp(15px, 1.7vw, 18px); color: var(--muted); max-width: 68ch; margin: 0; }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 10px 28px; margin-top: 22px;
+    font-family: var(--mono); font-size: 13px; color: var(--muted);
+  }
+  .meta b { color: var(--ink); font-weight: 600; }
+
+  /* legend */
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 20px; }
+  .owner {
+    display: inline-flex; align-items: center; gap: 8px; font-size: 13px;
+    font-weight: 600; padding: 5px 12px 5px 10px; border-radius: 999px;
+    border: 1px solid var(--line-strong); background: var(--panel);
+  }
+  .dot { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+  .dot.g { background: var(--g); } .dot.b { background: var(--b); } .dot.s { background: var(--s); }
+
+  /* callout */
+  .callout {
+    display: flex; gap: 14px; background: var(--panel); border: 1px solid var(--line);
+    border-left: 3px solid var(--pulse); border-radius: 10px; padding: 16px 18px;
+    margin: 30px 0 44px; box-shadow: var(--shadow);
+  }
+  .callout .ic { color: var(--pulse); font-weight: 800; font-family: var(--mono); flex: none; }
+  .callout p { margin: 0; font-size: 14.5px; color: var(--muted); }
+  .callout b { color: var(--ink); }
+
+  /* ---------- section ---------- */
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin: 52px 0 20px; }
+  .sec-num { font-family: var(--mono); font-size: 13px; color: var(--faint); }
+  h2 { font-size: clamp(19px, 2.4vw, 24px); margin: 0; letter-spacing: -.01em; font-weight: 750; }
+  .sec-sub { color: var(--muted); font-size: 14.5px; margin: -8px 0 24px; max-width: 70ch; }
+
+  /* ---------- epics ---------- */
+  .epics { display: grid; gap: 12px; }
+  .epic {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px 18px; box-shadow: var(--shadow);
+  }
+  .epic-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .epic-id {
+    font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--panel);
+    background: var(--s); padding: 3px 8px; border-radius: 6px; flex: none;
+  }
+  .epic.g .epic-id { background: var(--g); }
+  .epic.b .epic-id { background: var(--b); }
+  .epic.s .epic-id { background: var(--s); }
+  .epic-title { font-weight: 700; font-size: 15.5px; flex: 1; min-width: 200px; }
+  .tag {
+    font-size: 11.5px; font-weight: 700; font-family: var(--mono); letter-spacing: .03em;
+    padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+  }
+  .tag.g { color: var(--g); background: var(--g-bg); }
+  .tag.b { color: var(--b); background: var(--b-bg); }
+  .tag.s { color: var(--s); background: var(--s-bg); }
+  .epic ul { margin: 12px 0 0; padding-left: 0; list-style: none; display: grid; gap: 7px; }
+  .epic li {
+    font-size: 13.5px; color: var(--muted); padding-left: 20px; position: relative;
+  }
+  .epic li::before {
+    content: ""; position: absolute; left: 4px; top: 8px; width: 6px; height: 6px;
+    border-radius: 2px; background: var(--line-strong);
+  }
+  .epic.g li::before { background: var(--g); opacity: .6; }
+  .epic.b li::before { background: var(--b); opacity: .6; }
+  .epic.s li::before { background: var(--s); opacity: .6; }
+
+  /* ---------- gantt ---------- */
+  .gantt-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: var(--shadow); }
+  .gantt { min-width: 720px; width: 100%; border-collapse: collapse; font-size: 13px; }
+  .gantt th, .gantt td { border-bottom: 1px solid var(--line); padding: 0; }
+  .gantt thead th {
+    background: var(--grid-cell); text-align: center; padding: 10px 8px;
+    font-family: var(--mono); font-weight: 600; color: var(--muted);
+    border-left: 1px solid var(--line);
+  }
+  .gantt thead th .wk { display: block; color: var(--ink); font-weight: 700; font-size: 13px; }
+  .gantt thead th .dt { font-size: 11px; color: var(--faint); }
+  .gantt thead th.rowhead { text-align: left; background: var(--panel); border-left: none; min-width: 130px; }
+  .gantt tbody th.rowhead {
+    text-align: left; padding: 12px 14px; font-weight: 700; font-size: 13px;
+    background: var(--panel); position: sticky; left: 0; z-index: 2;
+    border-right: 1px solid var(--line);
+  }
+  .gantt tbody th .who { display: block; font-family: var(--mono); font-size: 11px; font-weight: 600; margin-top: 2px; }
+  .gantt td { border-left: 1px solid var(--line); padding: 8px; vertical-align: middle; height: 58px; }
+  .bar {
+    border-radius: 7px; padding: 7px 10px; font-size: 12px; font-weight: 650;
+    color: #fff; line-height: 1.25; box-shadow: 0 1px 3px rgba(0,0,0,.14);
+  }
+  .bar small { display: block; font-weight: 500; opacity: .92; font-size: 11px; }
+  .bar.g { background: var(--g); } .bar.b { background: var(--b); } .bar.s { background: var(--s); }
+  .row-g th.rowhead .who { color: var(--g); }
+  .row-b th.rowhead .who { color: var(--b); }
+  .row-s th.rowhead .who { color: var(--s); }
+
+  /* milestones */
+  .miles { display: grid; gap: 10px; margin-top: 18px; }
+  .mile {
+    display: flex; gap: 12px; align-items: flex-start; font-size: 13.5px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 15px;
+  }
+  .mile .flag { color: var(--pulse); flex: none; font-family: var(--mono); font-weight: 700; font-size: 12px; }
+  .mile b { color: var(--ink); } .mile span { color: var(--muted); }
+
+  /* sprint cards */
+  .sprints { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+  .sprint {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 18px; box-shadow: var(--shadow); display: flex; flex-direction: column;
+  }
+  .sprint h3 { margin: 0; font-size: 15px; font-weight: 750; }
+  .sprint .sdate { font-family: var(--mono); font-size: 12px; color: var(--pulse); margin: 3px 0 14px; letter-spacing: .02em; }
+  .sprint .goal { font-size: 13px; color: var(--muted); margin: 0 0 14px; padding-bottom: 14px; border-bottom: 1px dashed var(--line-strong); }
+  .sprint .goal b { color: var(--ink); }
+  .task-line { display: flex; gap: 9px; font-size: 13px; padding: 6px 0; align-items: flex-start; }
+  .task-line .pill { font-family: var(--mono); font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 5px; flex: none; margin-top: 1px; }
+  .task-line .pill.g { color: var(--g); background: var(--g-bg); }
+  .task-line .pill.b { color: var(--b); background: var(--b-bg); }
+  .task-line .pill.s { color: var(--s); background: var(--s-bg); }
+  .task-line span { color: var(--muted); }
+
+  /* cut list */
+  .cuts { display: grid; gap: 10px; }
+  .cut { display: flex; gap: 12px; align-items: baseline; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 13px 16px; }
+  .cut .ord { font-family: var(--mono); font-weight: 700; color: var(--pulse); font-size: 13px; flex: none; }
+  .cut p { margin: 0; font-size: 13.5px; color: var(--muted); }
+  .cut b { color: var(--ink); }
+
+  footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--faint); font-family: var(--mono); }
+
+  @media (max-width: 560px) {
+    .meta { gap: 8px 18px; }
+    .sec-head { flex-direction: column; gap: 4px; }
+  }
+</style>
+
+<div class="wrap">
+<div class="page">
+
+  <header class="hero">
+    <p class="eyebrow">
+      <svg width="34" height="14" viewBox="0 0 34 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M0 7h7l3-6 5 12 3-8 2 4h11"/></svg>
+      Календарный план · диссертация · 2 семестр
+    </p>
+    <h1>BUT PPG: качество сигнала и предсказание HR</h1>
+    <p class="lede">Воспроизводимое исследование на датасете BUT PPG v2.0.0: сравнение baseline-моделей, OpenTSLM и SIGMA-PPG, проверка переноса знаний ECG→PPG, low-data режим и внешняя валидация на GalaxyPPG.</p>
+
+    <div class="meta">
+      <span>Период: <b>27.07 — 20.08.2026</b></span>
+      <span>Спринтов: <b>4 (недельных)</b></span>
+      <span>Исполнителей: <b>2</b></span>
+    </div>
+
+    <div class="legend">
+      <span class="owner"><span class="dot g"></span>Голиков — данные, классические ML, SIGMA-PPG</span>
+      <span class="owner"><span class="dot b"></span>Будилов — метрики, deep-модели, OpenTSLM, GalaxyPPG</span>
+      <span class="owner"><span class="dot s"></span>Совместно — инфраструктура, low-data, финальные таблицы</span>
+    </div>
+  </header>
+
+  <div class="callout">
+    <span class="ic">!</span>
+    <p><b>О сроках честно.</b> Объём задания реально соответствует целому семестру, а не 3,5 неделям. План ниже — агрессивный: он ставит целью получить <b>работающий сквозной пайплайн со всеми моделями хотя бы в режиме «только PPG»</b>. Расширенные входы (PPG+ACC+covariates), дополнительные сиды и вариант с 3-осевым ACC вынесены в «список того, что режем первым» в конце.</p>
+  </div>
+
+  <!-- ============ DECOMPOSITION ============ -->
+  <div class="sec-head"><span class="sec-num">01</span><h2>Декомпозиция: эпики и подзадачи</h2></div>
+  <p class="sec-sub">Задание разбито на 10 эпиков (E0–E9). Цвет слева и тег справа показывают ответственного. Общая инфраструктура и финальная сборка — совместные.</p>
+
+  <div class="epics">
+
+    <div class="epic s">
+      <div class="epic-top"><span class="epic-id">E0</span><span class="epic-title">Инфраструктура и воспроизводимость</span><span class="tag s">СОВМЕСТНО</span></div>
+      <ul>
+        <li>Скелет репозитория, окружение (requirements/conda), фиксация версий</li>
+        <li>Единая система конфигов запуска, фиксация seed, версий датасетов</li>
+        <li>Каркас README: команды полного запуска + описание структуры проекта</li>
+        <li>Хранение артефактов: чекпоинты/ссылки, предсказания, метрики, логи, итоговые таблицы</li>
+      </ul>
+    </div>
+
+    <div class="epic g">
+      <div class="epic-top"><span class="epic-id">E1</span><span class="epic-title">BUT PPG: загрузка, предобработка, разбиение</span><span class="tag g">ГОЛИКОВ</span></div>
+      <ul>
+        <li>Скрипт загрузки + подготовки BUT PPG v2.0.0 (без хранения сырых данных в репо)</li>
+        <li>EDA: 3888 записей × 10 с, 50 испытуемых; PPG 30 Гц, ECG 1000 Гц, ACC 100 Гц</li>
+        <li>Окна 10 с → 300 точек PPG; решение по ACC (100 Гц vs привести к 30 Гц)</li>
+        <li>Реестр записей + метка качества + эталонный HR из ECG (ECG не идёт во входы!)</li>
+        <li>Разбиение строго по испытуемым 60/20/20 → 30/10/10, с фиксацией seed</li>
+        <li>Авто-проверка непересечения испытуемых + баланс по качеству/HR/месту измерения; файлы сплитов в репо</li>
+      </ul>
+    </div>
+
+    <div class="epic b">
+      <div class="epic-top"><span class="epic-id">E2</span><span class="epic-title">Метрики, eval-harness, тривиальные baseline</span><span class="tag b">БУДИЛОВ</span></div>
+      <ul>
+        <li>Метрики качества: Macro-F1 (основная), ROC-AUC, Accuracy, per-class P/R/F1, confusion matrix</li>
+        <li>Метрики HR: MAE (основная), RMSE</li>
+        <li>Единый формат сохранения предсказаний (record_id, subject_id, y_true, y_pred, prob/HR)</li>
+        <li>Тривиальные baseline: класс большинства; медианный HR; HR по доминирующей частоте PPG</li>
+        <li>Скрипт оценки на фиксированном тесте (все модели / выборочно)</li>
+      </ul>
+    </div>
+
+    <div class="epic g">
+      <div class="epic-top"><span class="epic-id">E3</span><span class="epic-title">Feature-based baseline (LogReg / XGBoost)</span><span class="tag g">ГОЛИКОВ</span></div>
+      <ul>
+        <li>Извлечение ~20–200 статистических и спектральных признаков из окна</li>
+        <li>Качество PPG — 4 варианта входов: PPG (все) · PPG (подмн. с ACC) · PPG+ACC · PPG+ACC+covariates</li>
+        <li>Выбор порога и гиперпараметров только по валидации; предсказания на тесте</li>
+      </ul>
+    </div>
+
+    <div class="epic b">
+      <div class="epic-top"><span class="epic-id">E4</span><span class="epic-title">Deep baseline (1D-CNN / ResNet1D)</span><span class="tag b">БУДИЛОВ</span></div>
+      <ul>
+        <li>Классификатор качества на сыром PPG (300 точек); опц. ветвь/каналы для ACC</li>
+        <li>Регрессор HR на сигналах хорошего качества (уд/мин)</li>
+        <li>Чекпоинты, выбор лучшего по валидации, предсказания на тесте</li>
+      </ul>
+    </div>
+
+    <div class="epic b">
+      <div class="epic-top"><span class="epic-id">E5</span><span class="epic-title">OpenTSLM: адаптация + перенос ECG→PPG</span><span class="tag b">БУДИЛОВ</span></div>
+      <ul>
+        <li>Адаптация OpenTSLM-Flamingo (Llama-3.2-3B) под BUT PPG, те же сплиты</li>
+        <li>Запуск 1 — без ECG-инициализации; Запуск 2 — с предобучением на ECG</li>
+        <li>Правила разбора ответа: качество — только good/bad или 1/0; HR — первое число 30–220</li>
+        <li>Сохранять сырой ответ, статус разбора, долю недопустимых ответов (не удалять молча)</li>
+        <li>ACC как модуль ускорения; чекпоинты + resume + отдельный скрипт оценки</li>
+      </ul>
+    </div>
+
+    <div class="epic g">
+      <div class="epic-top"><span class="epic-id">E6</span><span class="epic-title">SIGMA-PPG: изучение и дообучение</span><span class="tag g">ГОЛИКОВ</span></div>
+      <ul>
+        <li>Изучение репозитория SIGMA-PPG, предобработка датасета под формат модели</li>
+        <li>Дообучение в режиме «только PPG» на train-части BUT PPG (обе задачи)</li>
+        <li>Те же сплиты/реестр/метки/метрики; лучший чекпоинт по валидации (Macro-F1 / MAE)</li>
+      </ul>
+    </div>
+
+    <div class="epic b">
+      <div class="epic-top"><span class="epic-id">E7</span><span class="epic-title">Внешняя проверка на GalaxyPPG</span><span class="tag b">БУДИЛОВ</span></div>
+      <ul>
+        <li>Подготовка окон 10 с, приведение частоты/длины к формату каждой модели</li>
+        <li><b>Инверсия сырого PPG с Galaxy Watch</b> (отражательный сенсор); эталонный HR из ECG</li>
+        <li>HR prediction без дообучения; MAE/RMSE общий и <b>по активностям</b></li>
+        <li>Особый акцент: walking / jogging / running — где модели резко проседают</li>
+      </ul>
+    </div>
+
+    <div class="epic s">
+      <div class="epic-top"><span class="epic-id">E8</span><span class="epic-title">Low-data эксперимент</span><span class="tag s">СОВМЕСТНО</span></div>
+      <ul>
+        <li>Вложенные подмножества train по испытуемым: 25% ⊂ 50% ⊂ 100% (val/test фиксированы)</li>
+        <li>Для каждого размера — режим «только PPG»: features, CNN/ResNet1D, OpenTSLM (без/с ECG), SIGMA-PPG</li>
+        <li>Кривые Macro-F1(N) и MAE(N); таблицы ROC-AUC, Accuracy, RMSE</li>
+        <li>≥3 сида для 25% и 50%; в отчёте — среднее ± стандартное отклонение</li>
+      </ul>
+    </div>
+
+    <div class="epic s">
+      <div class="epic-top"><span class="epic-id">E9</span><span class="epic-title">Итоговое сравнение, отчёт, сборка</span><span class="tag s">СОВМЕСТНО</span></div>
+      <ul>
+        <li>Основная таблица «только PPG»: 8 моделей от majority до SIGMA-PPG</li>
+        <li>Отдельные таблицы: расширенные входы (PPG+ACC, +covariates) и low-data</li>
+        <li>Таблица GalaxyPPG: общий MAE/RMSE, по активностям, доля принятых окон</li>
+        <li>Полный прогон пайплайна end-to-end, финальный README, проверка воспроизводимости</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <!-- ============ GANTT ============ -->
+  <div class="sec-head"><span class="sec-num">02</span><h2>Календарный график по спринтам</h2></div>
+  <p class="sec-sub">Строки — исполнители, столбцы — недельные спринты. Плашка показывает, над каким эпиком человек работает в этот спринт.</p>
+
+  <div class="gantt-scroll">
+    <table class="gantt">
+      <thead>
+        <tr>
+          <th class="rowhead">Исполнитель</th>
+          <th><span class="wk">Спринт 1</span><span class="dt">27.07 — 02.08</span></th>
+          <th><span class="wk">Спринт 2</span><span class="dt">03.08 — 09.08</span></th>
+          <th><span class="wk">Спринт 3</span><span class="dt">10.08 — 16.08</span></th>
+          <th><span class="wk">Спринт 4</span><span class="dt">17.08 — 20.08</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="row-g">
+          <th class="rowhead" scope="row">Голиков<span class="who">данные · classic ML · SIGMA</span></th>
+          <td><div class="bar g">E1 · Данные BUT PPG<small>загрузка, предобработка, сплиты по испытуемым</small></div></td>
+          <td><div class="bar g">E3 · Feature baseline<small>+ старт E6: изучение SIGMA-PPG</small></div></td>
+          <td><div class="bar g">E6 · Дообучение SIGMA<small>+ cascade quality→HR</small></div></td>
+          <td><div class="bar s">E8/E9 · Финал<small>low-data + таблицы + сборка</small></div></td>
+        </tr>
+        <tr class="row-b">
+          <th class="rowhead" scope="row">Будилов<span class="who">метрики · deep · OpenTSLM</span></th>
+          <td><div class="bar b">E2 · Eval-harness<small>метрики + тривиальные baseline</small></div></td>
+          <td><div class="bar b">E4 · CNN/ResNet1D<small>+ старт E5: адаптация OpenTSLM</small></div></td>
+          <td><div class="bar b">E5 · 2 запуска OpenTSLM<small>+ E7: GalaxyPPG</small></div></td>
+          <td><div class="bar s">E8/E9 · Финал<small>low-data + таблицы + сборка</small></div></td>
+        </tr>
+        <tr class="row-s">
+          <th class="rowhead" scope="row">Совместно<span class="who">инфраструктура</span></th>
+          <td><div class="bar s">E0 · Репозиторий<small>env, конфиги, seed, README-каркас</small></div></td>
+          <td colspan="2" style="text-align:center; color:var(--faint); font-size:12px; font-family:var(--mono);">синхронизация раз в спринт</td>
+          <td><div class="bar s">E8 + E9<small>low-data по своим моделям + общий отчёт</small></div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="miles">
+    <div class="mile"><span class="flag">◆ S1</span><span><b>Готов фундамент:</b> сплиты по испытуемым с авто-проверкой непересечения, eval-harness со всеми метриками, тривиальные baseline считаются на тесте.</span></div>
+    <div class="mile"><span class="flag">◆ S2</span><span><b>Все baseline дают метрики на тесте:</b> feature-based (4 варианта входов) и 1D-CNN/ResNet1D для обеих задач; репо SIGMA и OpenTSLM изучены, лоадеры готовы.</span></div>
+    <div class="mile"><span class="flag">◆ S3</span><span><b>Продвинутые модели обучены:</b> SIGMA-PPG дообучена, OpenTSLM (без/с ECG) обучены, GalaxyPPG посчитан по активностям.</span></div>
+    <div class="mile"><span class="flag">◆ S4</span><span><b>Репозиторий воспроизводим end-to-end:</b> все итоговые таблицы собраны, README с полными командами, low-data кривые готовы.</span></div>
+  </div>
+
+  <!-- ============ SPRINT DETAIL ============ -->
+  <div class="sec-head"><span class="sec-num">03</span><h2>Спринты подробно</h2></div>
+
+  <div class="sprints">
+
+    <div class="sprint">
+      <h3>Спринт 1 · Фундамент</h3>
+      <p class="sdate">27.07 — 02.08</p>
+      <p class="goal">Цель: <b>данные и метрики готовы</b> — всё, от чего зависят все модели.</p>
+      <div class="task-line"><span class="pill s">E0</span><span>Скелет репо, окружение, конфиги, seed, каркас README</span></div>
+      <div class="task-line"><span class="pill g">E1</span><span>Загрузка + предобработка BUT PPG, окна 300 точек, решение по ACC</span></div>
+      <div class="task-line"><span class="pill g">E1</span><span>Сплиты 30/10/10 по испытуемым + авто-проверка + баланс</span></div>
+      <div class="task-line"><span class="pill b">E2</span><span>Метрики, формат предсказаний, тривиальные baseline</span></div>
+    </div>
+
+    <div class="sprint">
+      <h3>Спринт 2 · Baseline</h3>
+      <p class="sdate">03.08 — 09.08</p>
+      <p class="goal">Цель: <b>простые модели работают</b>, изучены репо SIGMA и OpenTSLM.</p>
+      <div class="task-line"><span class="pill g">E3</span><span>Признаки + LogReg/XGBoost, 4 варианта входов для качества</span></div>
+      <div class="task-line"><span class="pill b">E4</span><span>1D-CNN/ResNet1D: классификатор качества и регрессор HR</span></div>
+      <div class="task-line"><span class="pill g">E6</span><span>Изучение SIGMA-PPG, предобработка под формат модели</span></div>
+      <div class="task-line"><span class="pill b">E5</span><span>Адаптация OpenTSLM: лоадер, промпты, правила разбора ответа</span></div>
+    </div>
+
+    <div class="sprint">
+      <h3>Спринт 3 · Продвинутые модели</h3>
+      <p class="sdate">10.08 — 16.08</p>
+      <p class="goal">Цель: <b>OpenTSLM и SIGMA обучены</b>, внешняя проверка сделана.</p>
+      <div class="task-line"><span class="pill g">E6</span><span>Дообучение SIGMA-PPG (only-PPG), обе задачи</span></div>
+      <div class="task-line"><span class="pill g">E2</span><span>Сквозной сценарий quality→HR (доля принятых, FP/FN)</span></div>
+      <div class="task-line"><span class="pill b">E5</span><span>Два запуска OpenTSLM: без ECG и с ECG-инициализацией</span></div>
+      <div class="task-line"><span class="pill b">E7</span><span>GalaxyPPG: инверсия, окна, MAE по активностям</span></div>
+    </div>
+
+    <div class="sprint">
+      <h3>Спринт 4 · Финал</h3>
+      <p class="sdate">17.08 — 20.08 <span style="color:var(--faint)">(4 дня)</span></p>
+      <p class="goal">Цель: <b>low-data + сборка</b> воспроизводимого репозитория.</p>
+      <div class="task-line"><span class="pill s">E8</span><span>Low-data 25/50/100%: каждый гоняет свои модели, ≥3 сида</span></div>
+      <div class="task-line"><span class="pill s">E9</span><span>Итоговые таблицы: основная, расширенные входы, GalaxyPPG</span></div>
+      <div class="task-line"><span class="pill s">E9</span><span>Полный прогон end-to-end, README, проверка воспроизводимости</span></div>
+    </div>
+
+  </div>
+
+  <!-- ============ CUT LIST ============ -->
+  <div class="sec-head"><span class="sec-num">04</span><h2>Что режем первым, если не успеваем</h2></div>
+  <p class="sec-sub">Приоритет — рабочий сквозной пайплайн «только PPG». Ниже — по порядку жертвования, от наименее до наиболее болезненного.</p>
+
+  <div class="cuts">
+    <div class="cut"><span class="ord">1</span><p><b>Вариант с 3-осевым ACC для OpenTSLM.</b> В задании явно «если останется время». Остаёмся на модуле ускорения.</p></div>
+    <div class="cut"><span class="ord">2</span><p><b>Расширенные входы PPG+ACC+covariates.</b> Основная таблица «только PPG» важнее; расширенные входы — отдельная таблица, делается по остаточному принципу.</p></div>
+    <div class="cut"><span class="ord">3</span><p><b>Дополнительные сиды в low-data.</b> Минимум по заданию — 3 запуска для 25% и 50%; не наращиваем сверх.</p></div>
+    <div class="cut"><span class="ord">4</span><p><b>Low-data для тяжёлых моделей.</b> Если сроки горят — оставить кривые для features + CNN + SIGMA, а OpenTSLM только на 100%.</p></div>
+    <div class="cut"><span class="ord">5</span><p><b>Второй запуск OpenTSLM (с ECG).</b> Крайняя мера — перенос ECG→PPG ядро задания, режем только если совсем нет ресурсов GPU.</p></div>
+  </div>
+
+  <footer>
+    Календарный план · BUT PPG v2.0.0 · спринты 27.07–20.08.2026 · Голиков &amp; Будилов
+  </footer>
+
+</div>
+</div>

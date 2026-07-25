@@ -1,0 +1,35 @@
+# Base config. Every run starts here; model/data/experiment configs deep-merge on top.
+# Override anything from the CLI: `... key.subkey=value`.
+
+seed: 42
+deterministic: true
+
+dataset:
+  name: but_ppg
+  version: BUT-PPG-v2.0.0
+
+window:
+  seconds: 10
+  ppg_fs: 30            # Hz  -> 300 samples per window
+  ppg_len: 300
+  ecg_fs: 1000          # ECG is label-source only, never a model input
+  acc_fs: 100
+  # How ACC is fed to models. Decided in E1; keep in sync with the loaders.
+  acc_mode: resample_to_ppg   # resample_to_ppg | keep_native | magnitude
+
+split:
+  ratios: [0.6, 0.2, 0.2]     # by SUBJECT -> 30 / 10 / 10 for BUT PPG
+  file: splits/but_ppg_60_20_20.json
+  balance_on: [quality_label, measurement_site]
+
+# Checkpoint selection is ALWAYS on validation, by the task's primary metric.
+selection:
+  quality: macro_f1           # maximise
+  hr: mae                     # minimise
+
+paths:
+  registry: data/processed/registry.csv
+  predictions_dir: artifacts/predictions
+  checkpoints_dir: artifacts/checkpoints
+  metrics_dir: artifacts/metrics
+  logs_dir: artifacts/logs

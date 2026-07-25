@@ -1,0 +1,18 @@
+name: butppg
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy>=1.24
+  - scipy>=1.10
+  - pandas>=2.0
+  - scikit-learn>=1.3
+  - pyyaml>=6.0
+  - tqdm>=4.65
+  - pip
+  - pip:
+      - -e .
+      # Enable heavier stacks when needed:
+      # - -e ".[baselines]"
+      # - -e ".[deep]"
+      # - -e ".[viz]"

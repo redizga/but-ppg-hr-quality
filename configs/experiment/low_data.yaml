@@ -1,0 +1,9 @@
+# E8 (Both): nested train subsets; val/test stay fixed.
+experiment:
+  name: low_data
+  fractions: [0.25, 0.5, 1.0]     # 25% subjects ⊂ 50% ⊂ 100%
+  seeds: [42, 43, 44]             # >=3 seeds for 25% and 50%
+  models: [baseline_features, cnn1d, opentslm, sigma_ppg]  # only-PPG mode
+  report:
+    curves: [macro_f1_vs_subjects, mae_vs_subjects]
+    tables: [roc_auc, accuracy, rmse]

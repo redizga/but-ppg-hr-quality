@@ -1,0 +1,43 @@
+# ---- data & large artifacts (never commit raw datasets) ----
+data/raw/*
+data/interim/*
+data/processed/*
+!data/**/.gitkeep
+
+artifacts/checkpoints/*
+artifacts/predictions/*
+artifacts/logs/*
+!artifacts/**/.gitkeep
+# metrics json are small & reproducible-tracking -> keep them
+!artifacts/metrics/**
+
+# ---- python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.python-version
+
+# ---- tooling ----
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---- experiment trackers ----
+wandb/
+mlruns/
+lightning_logs/
+
+# ---- os / editor ----
+.DS_Store
+.idea/
+.vscode/
+*.swp

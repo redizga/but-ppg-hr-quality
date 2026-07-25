@@ -1,0 +1,13 @@
+# Reproducibility core (enough to run data prep, splits, feature baselines, evaluation).
+# Heavier stacks (torch, xgboost) are declared as optional extras in pyproject.toml.
+numpy>=1.24
+scipy>=1.10
+pandas>=2.0
+scikit-learn>=1.3
+pyyaml>=6.0
+tqdm>=4.65
+
+# Optional — uncomment or install via extras when you reach those epics:
+#   pip install -e ".[baselines]"   # xgboost
+#   pip install -e ".[deep]"        # torch  (OpenTSLM / SIGMA-PPG / 1D-CNN)
+#   pip install -e ".[viz]"         # matplotlib (low-data curves)

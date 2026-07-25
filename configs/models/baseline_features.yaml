@@ -1,0 +1,8 @@
+# E3 (Golikov): hand-crafted features + LogReg/XGBoost.
+defaults: [data/but_ppg]
+model:
+  name: baseline_features
+  estimator: logreg        # logreg | xgboost
+  input_variant: ppg_only  # ppg_only | ppg_only_acc_subset | ppg_acc | ppg_acc_covariates
+features:
+  domain: [time, frequency]
