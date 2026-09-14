@@ -146,6 +146,8 @@ def cmd_train(args: argparse.Namespace) -> int:
         cfg["ecg_init"] = args.ecg_init
     if args.model == "cnn1d":
         cfg["model"] = {"arch": args.arch, "channels": ["ppg"]}
+    if args.model == "trivial":
+        cfg["method"] = args.method  # hr only: 'median' | 'dominant_frequency'
 
     run = create_run(args.model, args.task, config=cfg)
     print(f"[train] run_id = {run.run_id}")
@@ -305,6 +307,8 @@ def build_parser() -> argparse.ArgumentParser:
     t.add_argument("--batch-size", type=int, default=32)
     t.add_argument("--lr", type=float, default=1e-3)
     t.add_argument("--arch", default="resnet1d", help="cnn1d: cnn1d|resnet1d")
+    t.add_argument("--method", default="median", choices=["median", "dominant_frequency"],
+                   help="trivial hr baseline: median HR or dominant-frequency HR")
     t.add_argument("--checkpoint-path", default=None, help="sigma_ppg: pretrained SIGMA checkpoint")
     t.add_argument("--target-fs", type=float, default=50.0, help="sigma_ppg: mart resample rate")
     t.add_argument("--patch-size", type=int, default=None, help="sigma_ppg: patch size (default=target_fs)")
