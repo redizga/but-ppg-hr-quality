@@ -4,10 +4,12 @@ Epic E1 (Budilov's verified script, ported to an importable function so the
 orchestrator's ``mart`` command can run/refresh the registry on demand).
 BUT PPG is open access (CC-BY 4.0, DOI 10.13026/tn53-8153) — no credentials.
 
-Real-format notes (found against real data): PPG ``.hea`` headers are
-non-standard (``wfdb`` reads n_sig=300/sig_len=1 -> ``.flatten()`` recovers the
-300-point series); ACC is a normal record (3, 1000) transposed to (3, T);
-record_id/subject_id are kept as strings to dodge pandas int64 coercion.
+Real-format notes (found against real data): most PPG records are 3-channel
+RGB smartphone signals (300, 3) with sig_names PPG_R/PPG_G/PPG_B -> we take the
+GREEN channel; a few early records use a non-standard single-channel header
+(1, 300) -> flatten (see ``_extract_ppg``). ACC is a normal record (3, 1000)
+transposed to (3, T); record_id/subject_id are kept as strings to dodge pandas
+int64 coercion.
 """
 
 from __future__ import annotations
@@ -33,14 +35,40 @@ def _fetch_csv(name: str) -> pd.DataFrame:
     return pd.read_csv(io.BytesIO(data), encoding="utf-8-sig")
 
 
+# BUT PPG v2.0.0 ships PPG in two on-disk shapes (confirmed against real records):
+#   * most records: a normal 3-channel RGB smartphone-camera signal, p_signal
+#     (300, 3) with sig_names PPG_R / PPG_G / PPG_B — we take the GREEN channel,
+#     the standard choice for photoplethysmography (strongest pulsatile SNR).
+#   * a few early records: a non-standard single-channel header, p_signal (1, 300)
+#     with junk sig_names — we just flatten to (300,).
+# Green is the deliberate default; switch here if a study calls for red/averaged.
+PPG_CHANNEL = "green"
+
+
+def _extract_ppg(rec) -> np.ndarray:
+    sig = np.asarray(rec.p_signal, dtype=np.float32)
+    names = [str(n).upper() for n in rec.sig_name]
+    n_ch = sig.shape[1] if sig.ndim == 2 else 1
+
+    if sig.ndim == 2 and n_ch == len(names) and n_ch >= 2:
+        green = next((i for i, nm in enumerate(names) if "PPG_G" in nm or "GREEN" in nm), None)
+        if green is None and n_ch == 3:
+            green = 1  # RGB channel order fallback if names are unexpected
+        ppg = sig[:, green] if green is not None else sig.flatten()
+    else:
+        ppg = sig.flatten()  # legacy single-channel header (1, 300) -> (300,)
+
+    ppg = ppg.astype(np.float32)
+    if ppg.shape != (PPG_LEN,):
+        raise ValueError(f"unexpected PPG shape {ppg.shape} (expected ({PPG_LEN},))")
+    return ppg
+
+
 def _download_ppg(record_id: str) -> np.ndarray:
     import wfdb
 
     rec = wfdb.rdrecord(f"{record_id}_PPG", pn_dir=f"{PN_DIR_ROOT}/{record_id}")
-    ppg = rec.p_signal.flatten().astype(np.float32)  # (1, 300) -> (300,)
-    if ppg.shape != (PPG_LEN,):
-        raise ValueError(f"unexpected PPG shape {ppg.shape} (expected ({PPG_LEN},))")
-    return ppg
+    return _extract_ppg(rec)
 
 
 def _download_acc(record_id: str) -> np.ndarray | None:
