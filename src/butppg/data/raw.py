@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import io
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import numpy as np
@@ -52,24 +53,58 @@ def _download_acc(record_id: str) -> np.ndarray | None:
     return acc.T if acc.shape[1] == 3 else acc  # -> (3, T)
 
 
+def _ingest_one(record_id: str, ppg_dir: Path, acc_dir: Path, include_acc: bool, skip_existing: bool) -> str | None:
+    """Download one record's PPG (+ACC) into the raw cache. Returns an error string or None.
+
+    The download is per-record and independent, so this is what the thread pool
+    fans out. BUT PPG is latency-bound (many tiny files, high round-trip cost),
+    so concurrency — not bandwidth — is what makes ingest fast.
+    """
+    import wfdb
+
+    ppg_out = ppg_dir / f"{record_id}.npz"
+    if not (skip_existing and ppg_out.exists()):
+        try:
+            rec = wfdb.rdrecord(f"{record_id}_PPG", pn_dir=f"{PN_DIR_ROOT}/{record_id}")
+            np.savez(
+                ppg_out,
+                p_signal=np.asarray(rec.p_signal, dtype=np.float32),
+                sig_name=np.array([str(n) for n in rec.sig_name], dtype=object),
+            )
+        except Exception as e:  # noqa: BLE001 - one bad record must not abort the run
+            return str(e)
+
+    if include_acc:
+        acc_out = acc_dir / f"{record_id}.npy"
+        if not (skip_existing and acc_out.exists()):
+            acc = _download_acc(record_id)
+            if acc is not None:
+                np.save(acc_out, acc)
+    return None
+
+
 def ingest_raw(
     raw_dir: str | Path = "data/raw",
     limit: int | None = None,
     include_acc: bool = True,
     skip_existing: bool = True,
+    workers: int = 8,
 ) -> Path:
     """Download raw BUT PPG signals + annotations into ``raw_dir``.
 
-    Resumable: already-downloaded records are skipped unless
-    ``skip_existing=False``; a single bad record is logged and skipped, never
-    fatal. Returns the raw dir. Network-bound — run once, then ``process``.
+    Downloads run concurrently (``workers`` threads) because BUT PPG is
+    latency-bound — thousands of tiny per-record files over a high-RTT link, so
+    parallelism collapses ~25 min of serial round-trips into a couple of minutes.
+    Resumable (already-cached records are skipped unless ``skip_existing=False``);
+    a single bad record is logged and skipped, never fatal. Run once, then
+    ``process``.
     """
-    import wfdb
-
     raw = Path(raw_dir)
     ppg_dir = raw / "ppg"
     acc_dir = raw / "acc"
     ppg_dir.mkdir(parents=True, exist_ok=True)
+    if include_acc:
+        acc_dir.mkdir(parents=True, exist_ok=True)
 
     # cache the annotation CSVs locally so `process` needs no network at all
     for name in ANNOTATION_FILES:
@@ -84,27 +119,16 @@ def ingest_raw(
         ids = ids[:limit]
 
     failures: list[tuple[str, str]] = []
-    for record_id in tqdm(ids, desc="ingest BUT PPG"):
-        ppg_out = ppg_dir / f"{record_id}.npz"
-        if not (skip_existing and ppg_out.exists()):
-            try:
-                rec = wfdb.rdrecord(f"{record_id}_PPG", pn_dir=f"{PN_DIR_ROOT}/{record_id}")
-                np.savez(
-                    ppg_out,
-                    p_signal=np.asarray(rec.p_signal, dtype=np.float32),
-                    sig_name=np.array([str(n) for n in rec.sig_name], dtype=object),
-                )
-            except Exception as e:  # noqa: BLE001 - one bad record must not abort the run
-                failures.append((record_id, str(e)))
-                continue
-
-        if include_acc:
-            acc_out = acc_dir / f"{record_id}.npy"
-            if not (skip_existing and acc_out.exists()):
-                acc = _download_acc(record_id)
-                if acc is not None:
-                    acc_dir.mkdir(parents=True, exist_ok=True)
-                    np.save(acc_out, acc)
+    workers = max(1, int(workers))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(_ingest_one, rid, ppg_dir, acc_dir, include_acc, skip_existing): rid
+            for rid in ids
+        }
+        for fut in tqdm(as_completed(futures), total=len(futures), desc=f"ingest BUT PPG (x{workers})"):
+            err = fut.result()
+            if err is not None:
+                failures.append((futures[fut], err))
 
     n_ppg = len(list(ppg_dir.glob("*.npz")))
     n_acc = len(list(acc_dir.glob("*.npy"))) if acc_dir.exists() else 0

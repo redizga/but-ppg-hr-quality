@@ -27,6 +27,7 @@ def prepare_but_ppg(
     include_acc: bool = True,
     skip_existing: bool = True,
     raw_dir: str | Path | None = None,
+    workers: int = 8,
 ) -> Path:
     """Ingest the raw layer then process it into ``<out_dir>/registry.csv``.
 
@@ -35,5 +36,5 @@ def prepare_but_ppg(
     """
     out_dir = Path(out_dir)
     raw_dir = Path(raw_dir) if raw_dir is not None else out_dir.parent / "raw"
-    ingest_raw(raw_dir=raw_dir, limit=limit, include_acc=include_acc, skip_existing=skip_existing)
+    ingest_raw(raw_dir=raw_dir, limit=limit, include_acc=include_acc, skip_existing=skip_existing, workers=workers)
     return process_records(raw_dir=raw_dir, out_dir=out_dir)

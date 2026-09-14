@@ -56,7 +56,7 @@ def cmd_mart(args: argparse.Namespace) -> int:
         from butppg.data.prepare import prepare_but_ppg
 
         print(f"[mart] preparing BUT PPG (limit={args.limit}) ...")
-        registry = str(prepare_but_ppg(out_dir=Path(registry).parent, limit=args.limit))
+        registry = str(prepare_but_ppg(out_dir=Path(registry).parent, limit=args.limit, workers=args.workers))
         print(f"[mart] registry -> {registry}")
 
     if args.make_split or not Path(split).exists():
@@ -104,6 +104,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         limit=args.limit,
         include_acc=not args.no_acc,
         skip_existing=not args.no_skip_existing,
+        workers=args.workers,
     )
     return 0
 
@@ -263,6 +264,7 @@ def build_parser() -> argparse.ArgumentParser:
     m.add_argument("--prepare", action="store_true", help="download+preprocess BUT PPG first")
     m.add_argument("--limit", type=int, default=None, help="with --prepare: only N records (smoke test)")
     m.add_argument("--make-split", action="store_true", help="(re)build the subject-wise split")
+    m.add_argument("--workers", type=int, default=8, help="with --prepare: parallel download threads")
     m.add_argument("--target-fs", type=float, default=50.0, help="SIGMA-PPG resample rate")
     m.add_argument("--normalize", choices=["zscore", "minmax"], default="zscore")
     m.add_argument("--acc-mode", choices=["none", "magnitude", "axes"], default="magnitude", help="OpenTSLM ACC")
@@ -278,6 +280,7 @@ def build_parser() -> argparse.ArgumentParser:
     ing.add_argument("--limit", type=int, default=None, help="only the first N records (smoke test)")
     ing.add_argument("--no-acc", action="store_true", help="skip accelerometer download")
     ing.add_argument("--no-skip-existing", action="store_true", help="re-download even if already cached")
+    ing.add_argument("--workers", type=int, default=8, help="parallel download threads (latency-bound; try 16)")
     ing.set_defaults(func=cmd_ingest)
 
     # process (raw -> processed + registry + split)
