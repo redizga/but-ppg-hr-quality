@@ -6,9 +6,14 @@ CLI-оркестратор для воспроизводимого исслед�
 
 | Команда | Что делает |
 |---|---|
-| `orch mart` | BUT PPG → входные **витрины** для SIGMA-PPG и/или OpenTSLM |
+| `orch ingest` | **RAW-слой**: качает сырые сигналы BUT PPG в `data/raw` (медленно, один раз, кэшируется) |
+| `orch process` | RAW → **обработанные окна + реестр + split** (быстро, локально, без сети) |
+| `orch mart` | реестр → входные **витрины** для SIGMA-PPG и/или OpenTSLM |
 | `orch train` | запускает **обучение** одной модели на одной задаче → `runs/<id>/` |
 | `orch results` | **результат**: метрики запусков и выгрузка обученных весов |
+
+ETL разделён на слои (`ingest` → `process` → `mart`), чтобы повторный прогон
+обработки (смена канала PPG, параметров окна) не тянул датасет заново из сети.
 
 Тяжёлые модели (SIGMA-PPG, OpenTSLM/Llama-3.2-3B) обучаются на сервере с GPU;
 лёгкие baseline (trivial, 1D-CNN) гоняются где угодно, включая ноутбук.
@@ -38,26 +43,40 @@ OpenTSLM тянет gated-модель Llama с Hugging Face. Нужен ток�
 `.env` в git не коммитится; CLI подхватывает его сам при старте (переменные из
 шелла имеют приоритет). Llama качается один раз и кэшируется в `~/.cache/huggingface`.
 
-## 1. Витрина — `orch mart`
+## 1. ETL: `orch ingest` → `orch process` → `orch mart`
 
-Превращает датасет в две проекции одного общего реестра (см. «Как устроены
-витрины» ниже). Может сама скачать данные и построить разбиение по испытуемым.
+Три слоя. Рекомендуемый порядок при первом запуске:
 
 ```bash
-# всё сразу: скачать BUT PPG, построить split 60/20/20, собрать обе витрины
-orch mart --prepare --make-split
-
-# только витрина SIGMA-PPG для задачи HR
-orch mart --model sigma_ppg --task hr
-
-# только OpenTSLM, качество, ACC как модуль ускорения
-orch mart --model opentslm --task quality --acc-mode magnitude
+orch ingest                         # RAW: качает сырые сигналы в data/raw (медленно, один раз)
+orch process --make-split           # RAW → реестр + окна + split 60/20/20 (быстро, без сети)
+orch mart                           # реестр → обе витрины (sigma_ppg + opentslm)
 ```
 
-Ключевые опции: `--model {sigma_ppg,opentslm,both}`, `--task {quality,hr,both}`,
+Смысл разделения: `ingest` кэширует **полный сырой сигнал** (все RGB-каналы) на
+диск, поэтому повторный `process` (сменил канал PPG, параметры окна) идёт за
+секунды и **ничего не качает заново**.
+
+```bash
+# только RAW-слой, для быстрой проверки — первые 50 записей
+orch ingest --limit 50
+
+# переобработать локально (напр. после изменения логики) — сеть не трогается
+orch process --make-split
+
+# витрины выборочно
+orch mart --model sigma_ppg --task hr
+orch mart --model opentslm --task quality --acc-mode magnitude
+
+# всё одной командой (ingest+process+mart), как раньше:
+orch mart --prepare --make-split
+```
+
+Ключевые опции `mart`: `--model {sigma_ppg,opentslm,both}`, `--task {quality,hr,both}`,
 `--target-fs` (ресемпл SIGMA, 50 Гц), `--normalize {zscore,minmax}`,
 `--acc-mode {none,magnitude,axes}` (OpenTSLM). Витрины пишутся в
-`artifacts/data_marts/<model>/<task>/`.
+`artifacts/data_marts/<model>/<task>/`. RAW-слой — в `data/raw/`
+(`ppg/<id>.npz` со всеми каналами + `acc/<id>.npy` + аннотации).
 
 ## 2. Обучение — `orch train`
 

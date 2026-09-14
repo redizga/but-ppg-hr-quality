@@ -60,14 +60,7 @@ def cmd_mart(args: argparse.Namespace) -> int:
         print(f"[mart] registry -> {registry}")
 
     if args.make_split or not Path(split).exists():
-        from butppg.data.registry import load_registry
-        from butppg.data.splits import make_subject_split, save_split
-
-        print("[mart] building subject-wise split ...")
-        reg_df = load_registry(registry)
-        tr, va, te = make_subject_split(reg_df, seed=args.seed)
-        save_split(tr, va, te, split, seed=args.seed)
-        print(f"[mart] split -> {split}  (train {len(tr)} / val {len(va)} / test {len(te)} subjects)")
+        _build_split(registry, split, args.seed)
 
     models = ["sigma_ppg", "opentslm"] if args.model == "both" else [args.model]
     tasks = ["quality", "hr"] if args.task == "both" else [args.task]
@@ -87,6 +80,43 @@ def cmd_mart(args: argparse.Namespace) -> int:
                 )
                 counts = {k: v["records"] for k, v in m["splits"].items()}
             print(f"[mart] {model}/{task}: {counts} -> {out_root / task}")
+    return 0
+
+
+def _build_split(registry_path: str, split_path: str, seed: int) -> None:
+    from butppg.data.registry import load_registry
+    from butppg.data.splits import make_subject_split, save_split
+
+    reg_df = load_registry(registry_path)
+    tr, va, te = make_subject_split(reg_df, seed=seed)
+    save_split(tr, va, te, split_path, seed=seed)
+    print(f"[split] {split_path}  (train {len(tr)} / val {len(va)} / test {len(te)} subjects)")
+
+
+# --------------------------------------------------------------------------- #
+# ingest  (RAW layer)                                                         #
+# --------------------------------------------------------------------------- #
+def cmd_ingest(args: argparse.Namespace) -> int:
+    from butppg.data.raw import ingest_raw
+
+    ingest_raw(
+        raw_dir=args.raw_dir,
+        limit=args.limit,
+        include_acc=not args.no_acc,
+        skip_existing=not args.no_skip_existing,
+    )
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# process  (raw -> processed windows + registry + split)                      #
+# --------------------------------------------------------------------------- #
+def cmd_process(args: argparse.Namespace) -> int:
+    from butppg.data.process import process_records
+
+    registry_path = process_records(raw_dir=args.raw_dir, out_dir=args.out_dir)
+    if args.make_split or not Path(args.split).exists():
+        _build_split(str(registry_path), args.split, args.seed)
     return 0
 
 
@@ -238,6 +268,26 @@ def build_parser() -> argparse.ArgumentParser:
     m.add_argument("--acc-mode", choices=["none", "magnitude", "axes"], default="magnitude", help="OpenTSLM ACC")
     m.add_argument("--seed", type=int, default=42)
     m.set_defaults(func=cmd_mart)
+
+    raw_default = str(PROJECT_ROOT / "data" / "raw")
+    processed_default = str(PROJECT_ROOT / "data" / "processed")
+
+    # ingest (RAW layer)
+    ing = sub.add_parser("ingest", help="download raw BUT PPG signals to data/raw (slow, cached)")
+    ing.add_argument("--raw-dir", default=raw_default)
+    ing.add_argument("--limit", type=int, default=None, help="only the first N records (smoke test)")
+    ing.add_argument("--no-acc", action="store_true", help="skip accelerometer download")
+    ing.add_argument("--no-skip-existing", action="store_true", help="re-download even if already cached")
+    ing.set_defaults(func=cmd_ingest)
+
+    # process (raw -> processed + registry + split)
+    pr = sub.add_parser("process", help="build registry + processed windows + split from data/raw (fast, local)")
+    pr.add_argument("--raw-dir", default=raw_default)
+    pr.add_argument("--out-dir", default=processed_default)
+    pr.add_argument("--split", default=_default_split())
+    pr.add_argument("--make-split", action="store_true", help="(re)build the subject-wise split")
+    pr.add_argument("--seed", type=int, default=42)
+    pr.set_defaults(func=cmd_process)
 
     # train
     t = sub.add_parser("train", help="launch training of one model on one task")
