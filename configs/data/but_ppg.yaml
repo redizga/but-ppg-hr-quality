@@ -1,8 +1,0 @@
-# BUT PPG v2.0.0 — 3888 windows (10 s), 50 subjects.
-# PPG 30 Hz, ECG 1000 Hz, ACC 100 Hz. Quality label + reference HR per PPG window.
-dataset:
-  name: but_ppg
-  version: BUT-PPG-v2.0.0
-  n_subjects_expected: 50
-  n_records_expected: 3888
-  download_url: ""        # E1: fill with the official PhysioNet URL

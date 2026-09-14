@@ -1,118 +1,139 @@
-# BUT PPG — качество сигнала и предсказание HR
+# BUT PPG — сервис-оркестратор
 
-Воспроизводимое исследование на датасете **BUT PPG v2.0.0**: бинарная классификация
-качества 10-секундного PPG-сигнала (задача A) и предсказание частоты сердечных
-сокращений — HR (задача B). Сравниваются простые baseline-модели, **OpenTSLM** и
-**SIGMA-PPG**; проверяется перенос знаний ECG→PPG, режим малого объёма обучающих
-данных и внешняя устойчивость на **GalaxyPPG**.
+CLI-оркестратор для воспроизводимого исследования на **BUT PPG v2.0.0**: одна
+точка входа с **тремя независимыми командами**, которые передают работу друг
+другу через файлы (витрины и папки запусков), а не единым пайплайном.
 
-> **Статус: E0 — инфраструктура и воспроизводимость.**
-> Реализован каркас репозитория, окружение, система конфигов, фиксация seed,
-> манифест запуска и структура хранения артефактов. Логика моделей, данных,
-> метрик и оценки добавляется в эпиках E1–E9 (см. [docs/PLAN.md](docs/PLAN.md)).
-> Скрипты и модули этих эпиков присутствуют как стабы с понятными CLI —
-> при вызове они бросают `NotImplementedError` с указанием эпика и владельца.
+| Команда | Что делает |
+|---|---|
+| `orch mart` | BUT PPG → входные **витрины** для SIGMA-PPG и/или OpenTSLM |
+| `orch train` | запускает **обучение** одной модели на одной задаче → `runs/<id>/` |
+| `orch results` | **результат**: метрики запусков и выгрузка обученных весов |
 
-## Установка окружения
+Тяжёлые модели (SIGMA-PPG, OpenTSLM/Llama-3.2-3B) обучаются на сервере с GPU;
+лёгкие baseline (trivial, 1D-CNN) гоняются где угодно, включая ноутбук.
+`OpenTSLM/` и `SigmaPPG/` — вендоренные апстрим-репозитории рядом с пакетом.
+
+## Установка
 
 ```bash
-# conda
-conda env create -f environment.yml
-conda activate butppg
-
-# либо venv + pip
 python -m venv .venv && source .venv/bin/activate
-pip install -e .            # репро-ядро (numpy/scipy/pandas/sklearn/pyyaml)
-# по мере необходимости подключать тяжёлые стеки:
-pip install -e ".[baselines]"   # xgboost      (E3)
-pip install -e ".[deep]"        # torch        (E4/E5/E6)
-pip install -e ".[viz]"         # matplotlib   (E8)
+pip install -e .                 # ядро (numpy/scipy/pandas/sklearn)
+pip install -e ".[data]"         # wfdb — для загрузки BUT PPG
+pip install -e ".[deep]"         # torch + einops — CNN / SIGMA-PPG / OpenTSLM
 ```
 
-## Полный запуск (команды по эпикам)
+После установки доступна команда `orch` (или `python -m butppg.orchestrator.cli`).
 
-Порядок соответствует пайплайну. На E0 команды-стабы уже зафиксированы, чтобы
-интерфейс не менялся при реализации.
+### Доступ к Llama (для OpenTSLM)
+
+OpenTSLM тянет gated-модель Llama с Hugging Face. Нужен токен и доступ к моделям:
+
+1. Запроси доступ (base-версии, **не** Instruct): обязательно
+   [`meta-llama/Llama-3.2-3B`](https://huggingface.co/meta-llama/Llama-3.2-3B),
+   желательно ещё `meta-llama/Llama-3.2-1B` (дешёвый smoke-тест).
+2. Создай токен со scope `read`: huggingface.co/settings/tokens.
+3. Скопируй `.env.example` → `.env` и впиши `HF_TOKEN=hf_...`.
+
+`.env` в git не коммитится; CLI подхватывает его сам при старте (переменные из
+шелла имеют приоритет). Llama качается один раз и кэшируется в `~/.cache/huggingface`.
+
+## 1. Витрина — `orch mart`
+
+Превращает датасет в две проекции одного общего реестра (см. «Как устроены
+витрины» ниже). Может сама скачать данные и построить разбиение по испытуемым.
 
 ```bash
-# 1. Подготовка BUT PPG: загрузка, предобработка, реестр записей        (E1)
-python scripts/prepare_but_ppg.py
+# всё сразу: скачать BUT PPG, построить split 60/20/20, собрать обе витрины
+orch mart --prepare --make-split
 
-# 2. Разбиение по испытуемым 60/20/20 (30/10/10) + проверка непересечения (E1)
-python scripts/make_splits.py \
-    --registry data/processed/registry.csv \
-    --out splits/but_ppg_60_20_20.json --seed 42
+# только витрина SIGMA-PPG для задачи HR
+orch mart --model sigma_ppg --task hr
 
-# 3. Базовые модели: признаки + LogReg/XGBoost                          (E3)
-python scripts/train_baseline.py --config models/baseline_features
-
-# 4. Базовые модели: 1D-CNN / ResNet1D (качество и HR)                  (E4)
-python scripts/train_cnn.py --config models/cnn1d
-
-# 5. OpenTSLM: два запуска — без ECG и с ECG-инициализацией             (E5)
-python scripts/train_opentslm.py --config models/opentslm model.ecg_init=false
-python scripts/train_opentslm.py --config models/opentslm model.ecg_init=true
-
-# 6. SIGMA-PPG: дообучение в режиме только-PPG                          (E6)
-python scripts/train_sigma.py --config models/sigma_ppg
-
-# 7. Эксперимент с малым объёмом данных (25/50/100%, >=3 сида)          (E8)
-python scripts/run_low_data.py --config experiment/low_data
-
-# 8. Подготовка GalaxyPPG (инверсия сигнала, окна, эталонный HR из ECG) (E7)
-python scripts/prepare_galaxy_ppg.py --config data/galaxy_ppg
-
-# 9. Внешняя проверка на GalaxyPPG (MAE общий и по активностям)         (E7)
-python scripts/eval_external_galaxy.py --config data/galaxy_ppg
-
-# Оценка на фиксированной тестовой части (все модели или выборочно)     (E2)
-python scripts/evaluate.py --all
-python scripts/evaluate.py artifacts/predictions/sigma_ppg_quality.csv
+# только OpenTSLM, качество, ACC как модуль ускорения
+orch mart --model opentslm --task quality --acc-mode magnitude
 ```
+
+Ключевые опции: `--model {sigma_ppg,opentslm,both}`, `--task {quality,hr,both}`,
+`--target-fs` (ресемпл SIGMA, 50 Гц), `--normalize {zscore,minmax}`,
+`--acc-mode {none,magnitude,axes}` (OpenTSLM). Витрины пишутся в
+`artifacts/data_marts/<model>/<task>/`.
+
+## 2. Обучение — `orch train`
+
+Создаёт запуск `runs/<run_id>/` (конфиг, чекпоинты, предсказания, метрики, лог)
+и обучает выбранную модель. Лучший чекпоинт выбирается по валидации (Macro-F1
+для качества, MAE для HR), финальные метрики — на фиксированном тесте.
+
+```bash
+# baseline на ноутбуке (реестр читается напрямую, витрина не нужна)
+orch train --model trivial --task quality
+orch train --model cnn1d   --task hr --epochs 50 --device cpu
+
+# SIGMA-PPG на GPU-сервере (нужна витрина sigma_ppg + предобученный чекпоинт)
+orch train --model sigma_ppg --task hr --device cuda \
+    --checkpoint-path /path/to/sigma.pth
+
+# OpenTSLM — два запуска для переноса ECG→PPG (по заданию: Llama-3.2-3B)
+orch train --model opentslm --task quality --device cuda            # без ECG
+orch train --model opentslm --task quality --device cuda \
+    --ecg-init /path/to/ecg_stage_checkpoint.pt                     # с ECG
+
+# лёгкая debug-модель, чтобы отладить конвейер без тяжёлой 3B
+orch train --model opentslm --task quality --device cuda --llm-id gemma-1b
+```
+
+**Алиасы `--llm-id`** (можно и полный HF-id): `llama-3b` (по умолчанию,
+`meta-llama/Llama-3.2-3B`), `llama-1b`, `gemma-1b` (`google/gemma-3-1b-pt`),
+`gemma-270m`. Gemma тоже gated на HF — доступ тем же `HF_TOKEN`.
+
+Модели `trivial`/`cnn1d` читают реестр (`--registry`, `--split`); `sigma_ppg`/
+`opentslm` читают витрину (`--mart-dir`, по умолчанию `artifacts/data_marts/<model>`).
+
+## 3. Результат — `orch results`
+
+```bash
+orch results                       # список всех запусков с основной метрикой
+orch results <run_id>              # метрики, статус, пути, ссылка на веса
+orch results <run_id> --download exports/<run_id>   # выкачать веса (+метрики+предсказания)
+```
+
+`--download` копирует лучший чекпоинт вместе с `metrics/` и `predictions/` в
+указанную папку — самодостаточный экспорт обученной модели.
+
+## Как устроены витрины (BUT PPG → вход модели)
+
+Сначала общий слой (загрузка + реестр + разбиение по испытуемым), затем две
+проекции — модели едят принципиально разное:
+
+| | SIGMA-PPG | OpenTSLM |
+|---|---|---|
+| Форма | `.npy` тензор `(N, 1, L)` по испытуемым | `.jsonl`: текст + ряд + ответ |
+| PPG | ресемпл 300@30Гц → 500@50Гц, нормализация | остаётся 300@30Гц, z-score |
+| ACC | нет (только PPG) | опционально, магнитудой |
+| «Ответ» | метка в `y` (int64/float32) | языком (`good`/`bad` или число 30–220) |
+
+ECG используется только как источник эталонного HR (метка), в модель не подаётся
+(защита от утечки). HR-витрины фильтруются по `quality_label==1` (раздел 2Б).
 
 ## Структура проекта
 
 ```
-but-ppg-hr-quality/
-├── configs/                 # YAML-конфиги (deep-merge + CLI-оверрайды)
-│   ├── default.yaml         #   база: seed, окно, разбиение, выбор чекпоинта
-│   ├── data/                #   but_ppg.yaml, galaxy_ppg.yaml
-│   ├── models/              #   baseline_features, cnn1d, opentslm, sigma_ppg
-│   └── experiment/          #   low_data.yaml
-├── src/butppg/              # пакет
-│   ├── config.py            #   [E0] загрузка/композиция конфигов
-│   ├── paths.py             #   [E0] канонические пути проекта
-│   ├── utils/               #   [E0] seed, логирование, манифест запуска
-│   ├── data/                #   [E1] загрузка, предобработка, реестр, сплиты (стабы)
-│   ├── features/            #   [E3] ручные признаки (стаб)
-│   ├── models/              #   [E2-E6] реализации моделей (стабы)
-│   ├── metrics/             #   [E2] метрики + формат предсказаний (стабы)
-│   └── evaluation/          #   [E2] оценка по файлам предсказаний (стаб)
-├── scripts/                 # CLI-точки входа (по одной на шаг пайплайна)
-├── splits/                  # файлы разбиения по испытуемым (коммитятся)
-├── data/                    # raw/interim/processed — В GIT НЕ ХРАНЯТСЯ
-├── artifacts/               # checkpoints/predictions/logs (gitignore), metrics (коммитятся)
-├── results/                 # итоговые метрики и таблицы (коммитятся)
-├── docs/                    # PLAN.md — декомпозиция и календарный план
-└── tests/                   # проверки инфраструктуры E0
+Диссертация/
+├── src/butppg/
+│   ├── orchestrator/       # CLI (mart/train/results) + реестр запусков
+│   ├── data/               # реестр, сплиты, подготовка BUT PPG, сборка витрин
+│   ├── training/           # драйверы: baselines, CNN, общий finalize + dispatch
+│   ├── adapters/           # мосты к вендоренным репо: sigma_ppg, opentslm
+│   ├── models/             # trivial baselines, 1D-CNN, разбор ответов OpenTSLM
+│   ├── metrics/            # Macro-F1/ROC-AUC/… , MAE/RMSE, формат предсказаний
+│   └── evaluation/         # оценка по файлам предсказаний
+├── configs/                # YAML-конфиги
+├── tests/                  # инфраструктура + сквозные тесты оркестратора
+├── OpenTSLM/  SigmaPPG/     # вендоренные апстрим-репозитории (в git не коммитятся)
+├── data/  artifacts/  runs/ # входы/витрины/запуски (в git не коммитятся)
+└── legacy/                  # предыдущие версии
 ```
 
-## Принципы воспроизводимости (заложены на E0)
-
-- **Единый seed** (`configs/default.yaml → seed`) применяется через
-  `butppg.utils.seed_everything` к Python/NumPy/PyTorch; детерминированный режим.
-- **Манифест запуска** (`butppg.utils.RunManifest`) сохраняется рядом с
-  результатами: конфиг, версия датасета, seed, git-ревизия, версии библиотек,
-  ссылки на файл разбиения и реестр.
-- **Разбиение строго по испытуемым**, тестовая часть фиксирована и одинакова для
-  всех моделей; выбор лучшего чекпоинта — только по валидации (Macro-F1 для
-  задачи A, MAE для задачи B).
-- **Сырые данные не коммитятся** — только скрипты загрузки/подготовки и
-  инструкции. ECG используется лишь как источник эталонного HR, но не как вход
-  модели (защита от утечки данных).
-
-## Распределение работ
-
-Полная декомпозиция, распределение между исполнителями (Голиков / Будилов) и
-календарный план по недельным спринтам (27.07–20.08) — в [docs/PLAN.md](docs/PLAN.md)
-и интерактивном плане [docs/plan.html](docs/plan.html).
+Ядро (реестр, сплиты, витрины, метрики, тривиальные/CNN, разбор OpenTSLM)
+перенесено из проверенной работы коллеги; поверх построен оркестратор.

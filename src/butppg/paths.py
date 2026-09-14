@@ -22,6 +22,16 @@ PREDICTIONS_DIR = ARTIFACTS_DIR / "predictions"
 METRICS_DIR = ARTIFACTS_DIR / "metrics"
 LOGS_DIR = ARTIFACTS_DIR / "logs"
 
+# Per-model input marts (the `orch mart` output).
+MARTS_DIR = ARTIFACTS_DIR / "data_marts"
+
+# One directory per training run (the `orch train` output; `orch results` reads it).
+RUNS_DIR = PROJECT_ROOT / "runs"
+
+# Vendored upstream model repos, checked out next to this package.
+OPENTSLM_DIR = PROJECT_ROOT / "OpenTSLM"
+SIGMA_DIR = PROJECT_ROOT / "SigmaPPG"
+
 
 def ensure_dirs() -> None:
     """Create the writable output dirs if missing (safe to call repeatedly)."""
@@ -29,5 +39,6 @@ def ensure_dirs() -> None:
         RAW_DIR, INTERIM_DIR, PROCESSED_DIR,
         SPLITS_DIR, RESULTS_DIR / "tables",
         CHECKPOINTS_DIR, PREDICTIONS_DIR, METRICS_DIR, LOGS_DIR,
+        MARTS_DIR, RUNS_DIR,
     ):
         d.mkdir(parents=True, exist_ok=True)

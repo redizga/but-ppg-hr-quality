@@ -3,15 +3,12 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "butppg"
+name = "butppg-orchestrator"
 version = "0.1.0"
-description = "Reproducible study of PPG signal-quality classification and heart-rate prediction on BUT PPG v2.0.0"
+description = "Orchestrator for BUT PPG: build per-model marts (SIGMA-PPG / OpenTSLM), launch training, fetch results."
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [
-    { name = "Golikov" },
-    { name = "Budilov" },
-]
+authors = [{ name = "Golikov" }, { name = "Budilov" }]
 dependencies = [
     "numpy>=1.24",
     "scipy>=1.10",
@@ -22,18 +19,23 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Heavier stacks are opt-in so the reproducibility core installs fast.
+# Data download (BUT PPG WFDB records).
+data = ["wfdb>=4.1"]
+# 1D-CNN / ResNet1D baseline + SIGMA-PPG / OpenTSLM adapters.
+deep = ["torch>=2.1", "einops>=0.7"]
 baselines = ["xgboost>=2.0"]
-deep = ["torch>=2.1"]
-viz = ["matplotlib>=3.7"]
 dev = ["pytest>=7.4", "ruff>=0.1"]
+
+[project.scripts]
+orch = "butppg.orchestrator.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.ruff]
-line-length = 100
+line-length = 110
 target-version = "py310"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
