@@ -19,6 +19,7 @@ dependencies = [
     "scikit-learn>=1.3",
     "pyyaml>=6.0",
     "tqdm>=4.65",
+    "wfdb>=4.1",       # BUT PPG / GalaxyPPG are WFDB-format PhysioNet datasets (E1/E7 download)
 ]
 
 [project.optional-dependencies]

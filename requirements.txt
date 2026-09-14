@@ -6,6 +6,7 @@ pandas>=2.0
 scikit-learn>=1.3
 pyyaml>=6.0
 tqdm>=4.65
+wfdb>=4.1          # BUT PPG / GalaxyPPG are WFDB-format PhysioNet datasets (E1/E7 download)
 
 # Optional — uncomment or install via extras when you reach those epics:
 #   pip install -e ".[baselines]"   # xgboost
