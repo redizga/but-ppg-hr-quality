@@ -1,0 +1,123 @@
+"""1D-CNN / ResNet1D trainer (assignment section 4).
+
+Trains directly off the registry's raw PPG windows (no mart needed — the CNN
+eats the 300-point signal as-is). One architecture serves both tasks; the loss
+and the checkpoint-selection metric are what differ:
+
+* quality -> BCEWithLogitsLoss, select best epoch by validation Macro-F1;
+* hr      -> L1Loss (MAE), select best epoch by validation MAE.
+
+CPU-capable for the small default model, so it's runnable on a laptop for a
+smoke run and on the GPU box for the real thing (``config['device']``).
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+
+from butppg.data.marts import load_ppg_window
+from butppg.metrics import PREDICTION_COLUMNS
+from butppg.metrics.quality import quality_metrics
+from butppg.metrics.hr import hr_metrics
+from butppg.paths import PROJECT_ROOT
+from butppg.training.common import finalize_predictions, load_split_frames
+from butppg.orchestrator.runs import RunRecord
+
+
+def _load_ppg_matrix(df: pd.DataFrame) -> np.ndarray:
+    return np.stack([load_ppg_window(r["ppg_path"], project_root=PROJECT_ROOT) for _, r in df.iterrows()])
+
+
+def _predict_frame(df: pd.DataFrame, task: str, y_pred, prob_good=None) -> pd.DataFrame:
+    out = pd.DataFrame(
+        {
+            "record_id": df["record_id"].values,
+            "subject_id": df["subject_id"].values,
+            "task": task,
+            "y_true": df["quality_label"].values if task == "quality" else df["hr_ref"].values,
+            "y_pred": y_pred,
+            "prob_good": prob_good if prob_good is not None else pd.NA,
+            "raw_response": pd.NA,
+            "parse_status": pd.NA,
+        }
+    )
+    return out[PREDICTION_COLUMNS]
+
+
+def train_cnn(run: RunRecord, cfg: dict) -> None:
+    import torch
+    from torch.utils.data import DataLoader, TensorDataset
+
+    from butppg.models.cnn1d import build_model_from_config
+
+    task = run.task
+    device = torch.device(cfg.get("device", "cpu"))
+    train_cfg = cfg.get("train", {})
+    epochs = int(train_cfg.get("epochs", 30))
+    batch_size = int(train_cfg.get("batch_size", 32))
+    lr = float(train_cfg.get("lr", 1e-3))
+
+    train_df, val_df, test_df = load_split_frames(cfg["registry"], cfg["split"], task)
+
+    def to_tensor(df):
+        x = _load_ppg_matrix(df)[:, np.newaxis, :].astype(np.float32)  # (N,1,300)
+        if task == "quality":
+            y = df["quality_label"].to_numpy(dtype=np.float32)
+        else:
+            y = df["hr_ref"].to_numpy(dtype=np.float32)
+        return torch.from_numpy(x), torch.from_numpy(y)
+
+    x_tr, y_tr = to_tensor(train_df)
+    x_va, y_va = to_tensor(val_df)
+    x_te, y_te = to_tensor(test_df)
+
+    model = build_model_from_config(cfg).to(device)
+    opt = torch.optim.Adam(model.parameters(), lr=lr)
+    criterion = torch.nn.BCEWithLogitsLoss() if task == "quality" else torch.nn.L1Loss()
+
+    loader = DataLoader(TensorDataset(x_tr, y_tr), batch_size=batch_size, shuffle=True)
+
+    best_score = -np.inf  # we maximize: macro-F1 (quality) or -MAE (hr)
+    best_state = None
+
+    def val_score() -> float:
+        model.eval()
+        with torch.no_grad():
+            out = model(x_va.to(device)).cpu().numpy()
+        if task == "quality":
+            pred = (1 / (1 + np.exp(-out)) >= 0.5).astype(int)
+            return quality_metrics(y_va.numpy().astype(int), pred)["macro_f1"]
+        return -hr_metrics(y_va.numpy(), out)["mae"]
+
+    for _epoch in range(epochs):
+        model.train()
+        for xb, yb in loader:
+            xb, yb = xb.to(device), yb.to(device)
+            opt.zero_grad()
+            loss = criterion(model(xb), yb)
+            loss.backward()
+            opt.step()
+        score = val_score()
+        if score > best_score:
+            best_score = score
+            best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+
+    if best_state is not None:
+        model.load_state_dict(best_state)
+    ckpt_path = run.checkpoints_dir / "best_model.pt"
+    run.ensure_dirs()
+    torch.save({"model": model.state_dict(), "cfg": cfg, "task": task}, ckpt_path)
+    run.best_checkpoint = str(ckpt_path)
+
+    model.eval()
+    with torch.no_grad():
+        out = model(x_te.to(device)).cpu().numpy()
+    if task == "quality":
+        prob = 1 / (1 + np.exp(-out))
+        preds = _predict_frame(test_df, task, y_pred=(prob >= 0.5).astype(int), prob_good=prob)
+    else:
+        preds = _predict_frame(test_df, task, y_pred=out)
+
+    finalize_predictions(run, preds)
+    run.set_status("finished")

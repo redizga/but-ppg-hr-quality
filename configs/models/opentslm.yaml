@@ -1,0 +1,10 @@
+# E5 (Budilov): OpenTSLM-Flamingo (Llama-3.2-3B). Two runs share this file.
+defaults: [data/but_ppg]
+model:
+  name: opentslm
+  backbone: Llama-3.2-3B
+  ecg_init: false          # run 1: false (no ECG) ; run 2: true (ECG-pretrained)
+  acc_mode: magnitude      # ACC as acceleration magnitude on stage 1
+parse:
+  quality_allowed: ["good", "bad", "1", "0"]
+  hr_range: [30, 220]      # first valid number in range; invalids are logged, not dropped

@@ -1,0 +1,10 @@
+# E4 (Budilov): 1D-CNN / ResNet1D on raw PPG (300 samples), optional ACC branch.
+defaults: [data/but_ppg]
+model:
+  name: cnn1d
+  arch: resnet1d           # cnn1d | resnet1d
+  channels: [ppg]          # add 'acc' to use the ACC branch
+train:
+  epochs: 50
+  batch_size: 64
+  lr: 0.001
