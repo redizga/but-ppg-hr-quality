@@ -71,12 +71,7 @@ def train_cnn(run: RunRecord, cfg: dict) -> None:
     train_df, val_df, test_df = load_split_frames(cfg["registry"], cfg["split"], task)
 
     def to_tensor(df):
-        x = _load_ppg_matrix(df).astype(np.float32)  # (N, 300)
-        # per-window z-score: strip amplitude/DC differences so the net learns
-        # pulse shape, not absolute scale (the marts normalize the same way).
-        m = x.mean(axis=1, keepdims=True)
-        s = x.std(axis=1, keepdims=True)
-        x = ((x - m) / (s + 1e-8))[:, np.newaxis, :]  # (N, 1, 300)
+        x = _load_ppg_matrix(df)[:, np.newaxis, :].astype(np.float32)  # (N,1,300)
         if task == "quality":
             y = df["quality_label"].to_numpy(dtype=np.float32)
         else:
@@ -86,17 +81,6 @@ def train_cnn(run: RunRecord, cfg: dict) -> None:
     x_tr, y_tr = to_tensor(train_df)
     x_va, y_va = to_tensor(val_df)
     x_te, y_te = to_tensor(test_df)
-
-    # HR regression: standardize the target with TRAIN stats so the loss is well
-    # scaled; predictions are mapped back to bpm before any metric/save.
-    if task == "hr":
-        hr_mean = float(y_tr.mean())
-        hr_std = float(y_tr.std()) or 1.0
-    else:
-        hr_mean, hr_std = 0.0, 1.0
-
-    def to_bpm(out: np.ndarray) -> np.ndarray:
-        return out * hr_std + hr_mean if task == "hr" else out
 
     model = build_model_from_config(cfg).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
@@ -114,7 +98,7 @@ def train_cnn(run: RunRecord, cfg: dict) -> None:
         if task == "quality":
             pred = (1 / (1 + np.exp(-out)) >= 0.5).astype(int)
             return quality_metrics(y_va.numpy().astype(int), pred)["macro_f1"]
-        return -hr_metrics(y_va.numpy(), to_bpm(out))["mae"]
+        return -hr_metrics(y_va.numpy(), out)["mae"]
 
     metric_name = "macro_f1" if task == "quality" else "mae"
 
@@ -128,8 +112,6 @@ def train_cnn(run: RunRecord, cfg: dict) -> None:
         running, n_batches = 0.0, 0
         for xb, yb in loader:
             xb, yb = xb.to(device), yb.to(device)
-            if task == "hr":
-                yb = (yb - hr_mean) / hr_std  # train on standardized target
             opt.zero_grad()
             loss = criterion(model(xb), yb)
             loss.backward()
@@ -166,7 +148,7 @@ def train_cnn(run: RunRecord, cfg: dict) -> None:
         prob = 1 / (1 + np.exp(-out))
         preds = _predict_frame(test_df, task, y_pred=(prob >= 0.5).astype(int), prob_good=prob)
     else:
-        preds = _predict_frame(test_df, task, y_pred=to_bpm(out))
+        preds = _predict_frame(test_df, task, y_pred=out)
 
     finalize_predictions(run, preds)
     run.set_status("finished")
