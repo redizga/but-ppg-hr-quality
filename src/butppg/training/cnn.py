@@ -100,18 +100,35 @@ def train_cnn(run: RunRecord, cfg: dict) -> None:
             return quality_metrics(y_va.numpy().astype(int), pred)["macro_f1"]
         return -hr_metrics(y_va.numpy(), out)["mae"]
 
-    for _epoch in range(epochs):
+    metric_name = "macro_f1" if task == "quality" else "mae"
+
+    def log(msg: str) -> None:
+        print(msg)
+        with open(run.log_file, "a", encoding="utf-8") as f:
+            f.write(msg + "\n")
+
+    for epoch in range(epochs):
         model.train()
+        running, n_batches = 0.0, 0
         for xb, yb in loader:
             xb, yb = xb.to(device), yb.to(device)
             opt.zero_grad()
             loss = criterion(model(xb), yb)
             loss.backward()
             opt.step()
+            running += float(loss)
+            n_batches += 1
         score = val_score()
-        if score > best_score:
+        improved = score > best_score
+        if improved:
             best_score = score
             best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+        # score is macro_f1 (maximize) or -mae; show the human-facing metric value
+        val_display = score if task == "quality" else -score
+        log(
+            f"[cnn] epoch {epoch + 1:>3}/{epochs}  loss={running / max(n_batches, 1):.4f}  "
+            f"val_{metric_name}={val_display:.4f}{'  *best' if improved else ''}"
+        )
 
     if device.type == "cuda":
         peak_mb = torch.cuda.max_memory_allocated(device) / 1e6
