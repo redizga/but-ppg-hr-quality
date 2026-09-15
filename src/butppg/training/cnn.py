@@ -52,7 +52,17 @@ def train_cnn(run: RunRecord, cfg: dict) -> None:
     from butppg.models.cnn1d import build_model_from_config
 
     task = run.task
-    device = torch.device(cfg.get("device", "cpu"))
+    requested = cfg.get("device", "cpu")
+    if str(requested).startswith("cuda") and not torch.cuda.is_available():
+        raise RuntimeError(
+            "--device cuda requested but torch.cuda.is_available() is False. "
+            "Check the CUDA build of torch (python -c \"import torch; print(torch.version.cuda)\")."
+        )
+    device = torch.device(requested)
+    dev_name = torch.cuda.get_device_name(device) if device.type == "cuda" else "CPU"
+    print(f"[cnn] training on {device} ({dev_name})")
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
     train_cfg = cfg.get("train", {})
     epochs = int(train_cfg.get("epochs", 30))
     batch_size = int(train_cfg.get("batch_size", 32))
@@ -102,6 +112,10 @@ def train_cnn(run: RunRecord, cfg: dict) -> None:
         if score > best_score:
             best_score = score
             best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+
+    if device.type == "cuda":
+        peak_mb = torch.cuda.max_memory_allocated(device) / 1e6
+        print(f"[cnn] peak GPU memory: {peak_mb:.1f} MB  (non-zero confirms training ran on the GPU)")
 
     if best_state is not None:
         model.load_state_dict(best_state)
