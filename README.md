@@ -91,7 +91,16 @@ orch mart --prepare --make-split
 ```bash
 # baseline на ноутбуке (реестр читается напрямую, витрина не нужна)
 orch train --model trivial --task quality
+orch train --model trivial --task hr --method dominant_frequency   # HR по доминирующей частоте
 orch train --model cnn1d   --task hr --epochs 50 --device cpu
+
+# признаки + LogReg/XGBoost (раздел 4), варианты входов (раздел 2А)
+orch train --model baseline_features --task quality --estimator logreg  --input-variant ppg
+orch train --model baseline_features --task hr      --estimator ridge   --input-variant ppg
+orch train --model baseline_features --task quality --estimator xgboost --input-variant ppg_acc
+orch train --model baseline_features --task quality --input-variant ppg_acc_cov
+# CNN с ACC-веткой (расширенный вход)
+orch train --model cnn1d --task quality --device cuda --epochs 50 --input-variant ppg_acc
 
 # SIGMA-PPG на GPU-сервере (нужна витрина sigma_ppg + предобученный чекпоинт)
 orch train --model sigma_ppg --task hr --device cuda \
@@ -123,6 +132,25 @@ orch results <run_id> --download exports/<run_id>   # выкачать веса 
 
 `--download` копирует лучший чекпоинт вместе с `metrics/` и `predictions/` в
 указанную папку — самодостаточный экспорт обученной модели.
+
+## 4. Сквозной сценарий quality→HR — `orch cascade` (раздел 2Б)
+
+```bash
+orch cascade --quality-run <quality_run_id> --hr-run <hr_run_id>
+```
+Считает по фиксированному тесту: долю принятых окон, false-reject (хорошие
+ошибочно отброшены) и false-accept (плохие ошибочно приняты) — из quality-модели
+на полном тесте; плюс HR MAE на принятых окнах, если задан `--hr-run`. Отчёт
+пишется в `results/tables/`.
+
+## 5. Итоговые таблицы — `orch table` (раздел 10)
+
+```bash
+orch table
+```
+Собирает из готовых запусков основную таблицу «только PPG» (все модели ×
+Quality/HR) и таблицу расширенных входов (Quality Macro-F1 по вариантам
+PPG / PPG+ACC / PPG+ACC+cov). Пишет Markdown + CSV в `results/tables/`.
 
 ## Как устроены витрины (BUT PPG → вход модели)
 

@@ -145,7 +145,12 @@ def cmd_train(args: argparse.Namespace) -> int:
         cfg["llm_id"] = resolve_llm_id(args.llm_id)
         cfg["ecg_init"] = args.ecg_init
     if args.model == "cnn1d":
-        cfg["model"] = {"arch": args.arch, "channels": ["ppg"]}
+        channels = ["ppg", "acc"] if args.input_variant in ("ppg_acc", "ppg_acc_cov") else ["ppg"]
+        cfg["model"] = {"arch": args.arch, "channels": channels}
+        cfg["input_variant"] = args.input_variant
+    if args.model == "baseline_features":
+        cfg["input_variant"] = args.input_variant
+        cfg["estimator"] = args.estimator
     if args.model == "trivial":
         cfg["method"] = args.method  # hr only: 'median' | 'dominant_frequency'
 
@@ -229,8 +234,58 @@ def _download_weights(run, out_dir: Path) -> int:
 
 
 # --------------------------------------------------------------------------- #
+# cascade  (quality-gate -> HR scenario, section 2B)                          #
+# --------------------------------------------------------------------------- #
+def cmd_cascade(args: argparse.Namespace) -> int:
+    import json
+
+    from butppg.evaluation.evaluate import cascade_report
+    from butppg.orchestrator.runs import load_run
+
+    q_run = load_run(args.quality_run)
+    q_path = q_run.predictions_dir / "test_predictions.csv"
+    h_path = None
+    if args.hr_run:
+        h_path = load_run(args.hr_run).predictions_dir / "test_predictions.csv"
+
+    report = cascade_report(q_path, h_path)
+    print("[cascade] quality-gate -> HR (section 2B)")
+    print(f"  accepted fraction : {report['accepted_fraction']:.4f}  ({report['n_accepted']}/{report['n_test']})")
+    print(f"  false-reject rate : {_fmtopt(report['false_reject_rate'])}  (good windows wrongly rejected)")
+    print(f"  false-accept rate : {_fmtopt(report['false_accept_rate'])}  (bad windows wrongly accepted)")
+    if report.get("hr_metrics_on_accepted"):
+        m = report["hr_metrics_on_accepted"]
+        print(f"  HR on accepted    : MAE={m['mae']:.3f}  RMSE={m['rmse']:.3f}  (n={report['hr_windows_scored']})")
+
+    out = RESULTS_DIR / "tables" / f"cascade_{args.quality_run}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"[cascade] report -> {out}")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# table  (assemble comparison tables, section 10)                             #
+# --------------------------------------------------------------------------- #
+def cmd_table(args: argparse.Namespace) -> int:
+    from butppg.reporting.tables import write_comparison
+
+    paths = write_comparison()
+    print("[table] wrote:")
+    for _, p in paths.items():
+        print(f"  {p}")
+    print()
+    print((paths["main_md"]).read_text(encoding="utf-8"))
+    return 0
+
+
+# --------------------------------------------------------------------------- #
 # helpers                                                                     #
 # --------------------------------------------------------------------------- #
+def _fmtopt(v) -> str:
+    return f"{v:.4f}" if isinstance(v, (int, float)) else "n/a"
+
+
 def _primary(run) -> str:
     m = run.metrics or {}
     if run.task == "quality" and "macro_f1" in m:
@@ -309,6 +364,10 @@ def build_parser() -> argparse.ArgumentParser:
     t.add_argument("--arch", default="resnet1d", help="cnn1d: cnn1d|resnet1d")
     t.add_argument("--method", default="median", choices=["median", "dominant_frequency"],
                    help="trivial hr baseline: median HR or dominant-frequency HR")
+    t.add_argument("--input-variant", default="ppg", choices=["ppg", "ppg_acc", "ppg_acc_cov"],
+                   help="input blocks for baseline_features/cnn1d (section 2A)")
+    t.add_argument("--estimator", default="logreg", choices=["logreg", "ridge", "xgboost"],
+                   help="baseline_features estimator (quality: logreg/xgboost; hr: ridge/xgboost)")
     t.add_argument("--checkpoint-path", default=None, help="sigma_ppg: pretrained SIGMA checkpoint")
     t.add_argument("--target-fs", type=float, default=50.0, help="sigma_ppg: mart resample rate")
     t.add_argument("--patch-size", type=int, default=None, help="sigma_ppg: patch size (default=target_fs)")
@@ -325,6 +384,16 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("run_id", nargs="?", default=None, help="omit to list all runs")
     r.add_argument("--download", default=None, metavar="DIR", help="export weights (+metrics+predictions) to DIR")
     r.set_defaults(func=cmd_results)
+
+    # cascade
+    c = sub.add_parser("cascade", help="quality-gate -> HR scenario metrics (section 2B)")
+    c.add_argument("--quality-run", required=True, help="run_id of a finished quality run (full test set)")
+    c.add_argument("--hr-run", default=None, help="optional run_id of an HR run (HR MAE on accepted windows)")
+    c.set_defaults(func=cmd_cascade)
+
+    # table
+    tb = sub.add_parser("table", help="assemble the section-10 comparison tables from finished runs")
+    tb.set_defaults(func=cmd_table)
 
     return p
 

@@ -25,8 +25,30 @@ from butppg.training.common import finalize_predictions, load_split_frames
 from butppg.orchestrator.runs import RunRecord
 
 
+ACC_LEN = 1000  # 10 s @ 100 Hz
+
+
 def _load_ppg_matrix(df: pd.DataFrame) -> np.ndarray:
     return np.stack([load_ppg_window(r["ppg_path"], project_root=PROJECT_ROOT) for _, r in df.iterrows()])
+
+
+def _load_acc_matrix(df: pd.DataFrame) -> np.ndarray:
+    """ACC magnitude per record, padded/truncated to ACC_LEN -> (N, 1, ACC_LEN)."""
+    from pathlib import Path
+
+    out = []
+    for _, r in df.iterrows():
+        path = Path(r["acc_path"])
+        if not path.is_absolute():
+            path = PROJECT_ROOT / path
+        acc = np.load(path).astype(np.float32)  # (3, T)
+        mag = np.linalg.norm(acc, axis=0)
+        if len(mag) >= ACC_LEN:
+            mag = mag[:ACC_LEN]
+        else:
+            mag = np.pad(mag, (0, ACC_LEN - len(mag)))
+        out.append(mag)
+    return np.stack(out)[:, np.newaxis, :].astype(np.float32)
 
 
 def _predict_frame(df: pd.DataFrame, task: str, y_pred, prob_good=None) -> pd.DataFrame:
@@ -68,25 +90,31 @@ def train_cnn(run: RunRecord, cfg: dict) -> None:
     batch_size = int(train_cfg.get("batch_size", 32))
     lr = float(train_cfg.get("lr", 1e-3))
 
-    train_df, val_df, test_df = load_split_frames(cfg["registry"], cfg["split"], task)
+    use_acc = "acc" in cfg.get("model", {}).get("channels", ["ppg"])
+    # ACC needs the ACC subset (can't feed a channel that isn't there)
+    train_df, val_df, test_df = load_split_frames(cfg["registry"], cfg["split"], task, acc_subset=use_acc)
 
-    def to_tensor(df):
-        x = _load_ppg_matrix(df)[:, np.newaxis, :].astype(np.float32)  # (N,1,300)
-        if task == "quality":
-            y = df["quality_label"].to_numpy(dtype=np.float32)
-        else:
-            y = df["hr_ref"].to_numpy(dtype=np.float32)
-        return torch.from_numpy(x), torch.from_numpy(y)
+    def tensors(df):
+        ppg = torch.from_numpy(_load_ppg_matrix(df)[:, np.newaxis, :].astype(np.float32))  # (N,1,300)
+        acc = torch.from_numpy(_load_acc_matrix(df)) if use_acc else None                   # (N,1,1000)
+        y_col = "quality_label" if task == "quality" else "hr_ref"
+        y = torch.from_numpy(df[y_col].to_numpy(dtype=np.float32))
+        return ppg, acc, y
 
-    x_tr, y_tr = to_tensor(train_df)
-    x_va, y_va = to_tensor(val_df)
-    x_te, y_te = to_tensor(test_df)
+    ppg_tr, acc_tr, y_tr = tensors(train_df)
+    ppg_va, acc_va, y_va = tensors(val_df)
+    ppg_te, acc_te, y_te = tensors(test_df)
 
     model = build_model_from_config(cfg).to(device)
+    print(f"[cnn] input variant: {'ppg+acc' if use_acc else 'ppg-only'}")
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = torch.nn.BCEWithLogitsLoss() if task == "quality" else torch.nn.L1Loss()
 
-    loader = DataLoader(TensorDataset(x_tr, y_tr), batch_size=batch_size, shuffle=True)
+    dataset = TensorDataset(ppg_tr, acc_tr, y_tr) if use_acc else TensorDataset(ppg_tr, y_tr)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    def forward(ppg, acc):
+        return model(ppg.to(device), acc.to(device)) if use_acc else model(ppg.to(device))
 
     best_score = -np.inf  # we maximize: macro-F1 (quality) or -MAE (hr)
     best_state = None
@@ -94,7 +122,7 @@ def train_cnn(run: RunRecord, cfg: dict) -> None:
     def val_score() -> float:
         model.eval()
         with torch.no_grad():
-            out = model(x_va.to(device)).cpu().numpy()
+            out = forward(ppg_va, acc_va).cpu().numpy()
         if task == "quality":
             pred = (1 / (1 + np.exp(-out)) >= 0.5).astype(int)
             return quality_metrics(y_va.numpy().astype(int), pred)["macro_f1"]
@@ -110,10 +138,15 @@ def train_cnn(run: RunRecord, cfg: dict) -> None:
     for epoch in range(epochs):
         model.train()
         running, n_batches = 0.0, 0
-        for xb, yb in loader:
-            xb, yb = xb.to(device), yb.to(device)
+        for batch in loader:
+            if use_acc:
+                ppg_b, acc_b, yb = batch
+            else:
+                ppg_b, yb = batch
+                acc_b = None
+            yb = yb.to(device)
             opt.zero_grad()
-            loss = criterion(model(xb), yb)
+            loss = criterion(forward(ppg_b, acc_b), yb)
             loss.backward()
             opt.step()
             running += float(loss)
@@ -123,7 +156,6 @@ def train_cnn(run: RunRecord, cfg: dict) -> None:
         if improved:
             best_score = score
             best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
-        # score is macro_f1 (maximize) or -mae; show the human-facing metric value
         val_display = score if task == "quality" else -score
         log(
             f"[cnn] epoch {epoch + 1:>3}/{epochs}  loss={running / max(n_batches, 1):.4f}  "
@@ -143,7 +175,7 @@ def train_cnn(run: RunRecord, cfg: dict) -> None:
 
     model.eval()
     with torch.no_grad():
-        out = model(x_te.to(device)).cpu().numpy()
+        out = forward(ppg_te, acc_te).cpu().numpy()
     if task == "quality":
         prob = 1 / (1 + np.exp(-out))
         preds = _predict_frame(test_df, task, y_pred=(prob >= 0.5).astype(int), prob_good=prob)
