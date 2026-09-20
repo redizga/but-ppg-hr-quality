@@ -86,11 +86,30 @@ python -c "import torch; print('cuda', torch.cuda.is_available(), 'torch', torch
 Ожидаем `cuda True`. Если `False` — переустановить torch под нужный CUDA
 (cu121 или cu130 колёса).
 
-Секреты — в `.env` (в git не попадает, см. `.gitignore`):
+Секреты — в `.env` (в git не попадает, см. `.gitignore`). На поде обычно нет
+редактора (`nano`/`vi`), поэтому впиши токен одной командой (ввод скрыт):
 ```bash
 cp .env.example .env
-# вписать HF_TOKEN=<токен Hugging Face>  (нужен для gated Llama/Gemma в OpenTSLM)
+read -s -p "HF token: " HF && echo && sed -i "s|^HF_TOKEN=.*|HF_TOKEN=$HF|" .env
+grep -q '^HF_TOKEN=hf_' .env && echo "OK" || echo "пусто/неверный формат"
 ```
+HF-CLI для скачивания весов (SIGMA-чекпойнт, gated-модели):
+```bash
+pip install -U "huggingface_hub[cli]"   # даёт команды `hf` и `huggingface-cli`
+```
+
+### 3.1 Vendored-репозитории моделей
+
+`SigmaPPG` и `OpenTSLM` **не в git** (в `.gitignore`) — их клонируют отдельно
+в корень проекта, туда, где их ждёт `paths.py`
+(`PROJECT_ROOT/SigmaPPG`, `PROJECT_ROOT/OpenTSLM`):
+```bash
+cd /workspace/but-ppg-hr-quality
+git clone https://github.com/ZonghengGuo/SigmaPPG.git   # для sigma_ppg (шаг 5.4)
+git clone https://github.com/OpenTSLM/OpenTSLM.git       # для opentslm (шаг 5.5)
+```
+> Если SIGMA при запуске падает с `ModuleNotFoundError` на пакете из их репо
+> (напр. `timm`) — доставь его `pip install <пакет>` и повтори команду.
 
 ---
 
@@ -138,8 +157,9 @@ orch train --model cnn1d --task hr      --device cuda --epochs 30 --input-varian
 ```
 
 ### 5.4 SIGMA-PPG (GPU, нужен предобученный чекпойнт)
+Репо `SigmaPPG` уже склонирован на шаге 3.1. Скачать веса (публичные, токен не нужен):
 ```bash
-huggingface-cli download zonhengu/sigmappg sigma.pth --local-dir /workspace
+hf download zonhengu/sigmappg sigma.pth --local-dir /workspace
 orch train --model sigma_ppg --task quality --device cuda --checkpoint-path /workspace/sigma.pth
 orch train --model sigma_ppg --task hr      --device cuda --checkpoint-path /workspace/sigma.pth
 ```
@@ -222,6 +242,9 @@ tar czf /workspace/results.tgz runs results
 | Симптом | Причина | Фикс |
 |---|---|---|
 | ssh: bad permissions on key | `/workspace` монтируется `0666` | держать ключ в `/root/.ssh`, `chmod 600` |
+| `SIGMA-PPG repo not found` / OpenTSLM not found | vendored-репы в `.gitignore` | склонировать (шаг 3.1) |
+| `huggingface-cli: command not found` | HF-CLI не установлен | `pip install "huggingface_hub[cli]"`, команда `hf download` |
+| `nano: command not found` | на поде нет редактора | писать через `sed`/`read` (шаг 3) или `apt-get install -y nano` |
 | `uv: command not found` после установки | uv не в PATH / кэш bash | `source /root/.local/bin/env && hash -r` |
 | pip нет в venv312 | uv-venv без pip | пересоздать `uv venv --seed` |
 | `cuda False` | torch не под нужный CUDA | переустановить cu121/cu130 колёса |
