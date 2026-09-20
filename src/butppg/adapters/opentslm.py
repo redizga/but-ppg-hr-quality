@@ -157,6 +157,20 @@ def train_opentslm(run: RunRecord, cfg: dict) -> None:
     run.ensure_dirs()
     ckpt_path = run.checkpoints_dir / "best_model.pt"
     best_val = float("inf")
+    best_state = None
+
+    def snapshot_trainable():
+        # Only the params the optimizer updates (perceiver, gated cross-attn, LM
+        # input embeddings). The frozen LLM is re-loaded from HF, so persisting
+        # it would be a multi-GB fp32 dump that blows the volume quota. Kept on
+        # CPU so the snapshot survives to the end without holding GPU memory.
+        return {n: p.detach().cpu().clone() for n, p in model.named_parameters() if p.requires_grad}
+
+    def restore_trainable(state):
+        params = dict(model.named_parameters())
+        with torch.no_grad():
+            for n, v in state.items():
+                params[n].data.copy_(v.to(device))
 
     for epoch in range(epochs):
         model.train()
@@ -182,13 +196,18 @@ def train_opentslm(run: RunRecord, cfg: dict) -> None:
         _log(run, f"epoch {epoch + 1}/{epochs}  val_loss={val_loss:.4f}")
         if val_loss < best_val:
             best_val = val_loss
-            model.store_to_file(str(ckpt_path))
-            run.best_checkpoint = str(ckpt_path)
-            run.save()
+            best_state = snapshot_trainable()
 
-    # Best checkpoint -> generate on the fixed test fold.
-    if ckpt_path.exists():
-        model.load_from_file(str(ckpt_path))
+    # Restore the best epoch and persist a compact (trainable-only) checkpoint.
+    # OpenTSLM's own store_to_file/load_from_file mismatch key prefixes (it saves
+    # "perceiver.*" but loads "model.perceiver.*"), so they silently restore
+    # nothing; and dumping the frozen LLM blows the disk quota. We snapshot the
+    # trainable params in memory instead.
+    if best_state is not None:
+        restore_trainable(best_state)
+        torch.save(best_state, ckpt_path)
+        run.best_checkpoint = str(ckpt_path)
+        run.save()
     model.eval()
     raw_responses: List[str] = []
     with torch.no_grad():

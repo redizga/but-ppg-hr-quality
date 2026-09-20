@@ -198,6 +198,9 @@ sed -i 's/model\.vision_encoder\.requires_grad_(True)/model.vision_encoder.visua
     OpenTSLM/src/opentslm/model/llm/OpenTSLMFlamingo.py
 sed -i 's/self\.vision_encoder(/self.vision_encoder.visual(/g' \
     OpenTSLM/src/opentslm/model/llm/TimeSeriesFlamingoWithTrainableEncoder.py
+# open_flamingo 0.0.2 Flamingo.generate() не принимает eos/pad_token_id — убираем их:
+sed -i '/eos_token_id=self.text_tokenizer.eos_token_id,/d; /pad_token_id=self.text_tokenizer.pad_token_id,/d' \
+    OpenTSLM/src/opentslm/model/llm/OpenTSLMFlamingo.py
 ```
 
 Прогон (llama-1b — лёгкая, для отладки; при желании llama-3b):
