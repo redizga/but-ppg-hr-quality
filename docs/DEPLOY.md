@@ -192,10 +192,12 @@ pip install "huggingface_hub[cli]"
 pip install "torch==2.6.*" "torchvision==0.21.*" --index-url https://download.pytorch.org/whl/cu124
 python -c "import torch, transformers; print('cuda', torch.cuda.is_available(), 'tf', transformers.__version__)"
 
-# Патч бага OpenTSLM: обучаемый TS-энкодер лежит в .visual заглушки
-# SimpleNamespace, а их код зовёт requires_grad_ на самой заглушке.
+# Патчи бага OpenTSLM: обучаемый TS-энкодер лежит в .visual заглушки
+# SimpleNamespace, а их код обращается к самой заглушке (requires_grad_ и вызов).
 sed -i 's/model\.vision_encoder\.requires_grad_(True)/model.vision_encoder.visual.requires_grad_(True)/' \
     OpenTSLM/src/opentslm/model/llm/OpenTSLMFlamingo.py
+sed -i 's/self\.vision_encoder(/self.vision_encoder.visual(/g' \
+    OpenTSLM/src/opentslm/model/llm/TimeSeriesFlamingoWithTrainableEncoder.py
 ```
 
 Прогон (llama-1b — лёгкая, для отладки; при желании llama-3b):
@@ -262,7 +264,7 @@ tar czf /workspace/results.tgz runs results
 | `cuda False` | torch не под нужный CUDA | переустановить cu121/cu130 колёса |
 | `NVIDIA driver too old (found 12080)` | torch собран под CUDA 13, драйвер 12.8 | `pip install "torch==2.6.*" "torchvision==0.21.*" --index-url .../cu124` |
 | `operator torchvision::nms does not exist` | torch и torchvision разных версий | ставить их одной парой (torch 2.6 ↔ torchvision 0.21) |
-| `SimpleNamespace has no attribute requires_grad_` | баг OpenTSLM (TS-энкодер в `.visual`) | sed-патч `OpenTSLMFlamingo.py` (шаг 5.5) |
+| `SimpleNamespace has no attribute requires_grad_` / `SimpleNamespace object is not callable` | баг OpenTSLM (TS-энкодер в `.visual`) | sed-патчи `OpenTSLMFlamingo.py` + `TimeSeriesFlamingoWithTrainableEncoder.py` (шаг 5.5) |
 | OpenTSLM: `stack expects each tensor to be equal size` | витрина с ACC даёт разное число рядов | пересобрать `orch mart --model opentslm --acc-mode none` |
 | OpenTSLM `No module named transformers` | стоит в 3.11, а не в venv312 | ставить внутри активного `.venv312` |
 | HR MAE у всех моделей ~median | HR считается только на good-quality окнах (раздел 2Б) — так и задумано | это валидный результат, не «баг» |
