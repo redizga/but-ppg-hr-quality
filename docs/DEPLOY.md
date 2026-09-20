@@ -184,8 +184,9 @@ pip install -e ".[data,deep,baselines]"
 pip install -e OpenTSLM            # репо склонирован на шаге 3.1
 pip install "huggingface_hub[cli]"
 # ВАЖНО: pip по умолчанию тянет torch под CUDA 13. Если драйвер пода 12.x
-# (проверить: nvidia-smi), поставить torch под cu124 — иначе "driver too old":
-pip install "torch==2.6.*" --index-url https://download.pytorch.org/whl/cu124
+# (проверить: nvidia-smi), поставить torch+torchvision под cu124 одной парой
+# (иначе "driver too old", а рассинхрон версий -> "torchvision::nms does not exist"):
+pip install "torch==2.6.*" "torchvision==0.21.*" --index-url https://download.pytorch.org/whl/cu124
 python -c "import torch, transformers; print('cuda', torch.cuda.is_available(), 'tf', transformers.__version__)"
 ```
 
@@ -251,6 +252,7 @@ tar czf /workspace/results.tgz runs results
 | `uv: command not found` после установки | uv не в PATH / кэш bash | `source /root/.local/bin/env && hash -r` |
 | pip нет в venv312 | uv-venv без pip | пересоздать `uv venv --seed` |
 | `cuda False` | torch не под нужный CUDA | переустановить cu121/cu130 колёса |
-| `NVIDIA driver too old (found 12080)` | torch собран под CUDA 13, драйвер 12.8 | `pip install "torch==2.6.*" --index-url .../cu124` |
+| `NVIDIA driver too old (found 12080)` | torch собран под CUDA 13, драйвер 12.8 | `pip install "torch==2.6.*" "torchvision==0.21.*" --index-url .../cu124` |
+| `operator torchvision::nms does not exist` | torch и torchvision разных версий | ставить их одной парой (torch 2.6 ↔ torchvision 0.21) |
 | OpenTSLM `No module named transformers` | стоит в 3.11, а не в venv312 | ставить внутри активного `.venv312` |
 | HR MAE у всех моделей ~median | HR считается только на good-quality окнах (раздел 2Б) — так и задумано | это валидный результат, не «баг» |
