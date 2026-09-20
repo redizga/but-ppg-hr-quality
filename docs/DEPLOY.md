@@ -121,9 +121,12 @@ ETL слоёный: RAW-загрузка (сеть) → PROCESSED (локаль�
 ```bash
 orch ingest --workers 16      # параллельная загрузка BUT PPG (~секунды, latency-bound)
 orch process                  # реестр из кэша: 3888 записей / 50 субъектов / 30·10·10
-orch mart --model sigma_ppg   # per-subject .npy, ресемпл 30→50 Гц
-orch mart --model opentslm    # per-split JSONL (QADataset)
+orch mart --model sigma_ppg              # per-subject .npy, ресемпл 30→50 Гц
+orch mart --model opentslm --acc-mode none   # per-split JSONL, PPG-only
 ```
+> `--acc-mode none` обязателен для OpenTSLM: с ACC у записей разное число рядов
+> (PPG+ACC vs только PPG), и батч не собирается (`stack expects each tensor to
+> be equal size`). OpenTSLM сравниваем по PPG.
 
 ---
 
@@ -260,5 +263,6 @@ tar czf /workspace/results.tgz runs results
 | `NVIDIA driver too old (found 12080)` | torch собран под CUDA 13, драйвер 12.8 | `pip install "torch==2.6.*" "torchvision==0.21.*" --index-url .../cu124` |
 | `operator torchvision::nms does not exist` | torch и torchvision разных версий | ставить их одной парой (torch 2.6 ↔ torchvision 0.21) |
 | `SimpleNamespace has no attribute requires_grad_` | баг OpenTSLM (TS-энкодер в `.visual`) | sed-патч `OpenTSLMFlamingo.py` (шаг 5.5) |
+| OpenTSLM: `stack expects each tensor to be equal size` | витрина с ACC даёт разное число рядов | пересобрать `orch mart --model opentslm --acc-mode none` |
 | OpenTSLM `No module named transformers` | стоит в 3.11, а не в venv312 | ставить внутри активного `.venv312` |
 | HR MAE у всех моделей ~median | HR считается только на good-quality окнах (раздел 2Б) — так и задумано | это валидный результат, не «баг» |
