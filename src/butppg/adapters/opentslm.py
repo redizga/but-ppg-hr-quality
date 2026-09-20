@@ -117,6 +117,14 @@ def train_opentslm(run: RunRecord, cfg: dict) -> None:
     max_new_tokens = int(cfg.get("max_new_tokens", 32))
 
     model = OpenTSLMFlamingo(device=device, llm_id=llm_id)
+    # OpenTSLM wraps the trainable time-series encoder in a plain SimpleNamespace
+    # (``vision_encoder.visual``). ``model.to(device)`` only recurses into
+    # registered nn.Modules, so that encoder stays on CPU and the forward pass
+    # dies with a cuda/cpu device mismatch. Move it explicitly to match.
+    try:
+        model.model.vision_encoder.visual.to(device)
+    except AttributeError:
+        pass
     if ecg_init:
         # ECG->PPG transfer: warm-start from the ECG-stage checkpoint.
         model.load_from_file(ecg_init)
