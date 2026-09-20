@@ -122,9 +122,13 @@ def train_opentslm(run: RunRecord, cfg: dict) -> None:
     # time-series encoder is hidden in a plain SimpleNamespace
     # (``vision_encoder.visual``) that ``.to()`` won't recurse into. Both cause
     # a cuda/cpu mismatch in the forward pass, so move them onto ``device``.
+    # ``dtype=float32``: OpenTSLM loads the LLM in bfloat16 but leaves the
+    # perceiver / TS encoder in float32, so their params clash ("expected
+    # BFloat16 but found Float"). Unify on float32 — the input series are float32
+    # and an A6000 has room for the 1B/3B model in fp32.
     try:
-        model.model.to(device)                        # perceiver + cross-attn
-        model.model.vision_encoder.visual.to(device)  # SimpleNamespace-hidden encoder
+        model.model.to(device=device, dtype=torch.float32)          # perceiver + cross-attn + LLM
+        model.model.vision_encoder.visual.to(device=device, dtype=torch.float32)  # SimpleNamespace encoder
     except AttributeError:
         pass
     if ecg_init:
