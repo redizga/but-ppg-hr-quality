@@ -56,18 +56,11 @@ def cmd_mart(args: argparse.Namespace) -> int:
         from butppg.data.prepare import prepare_but_ppg
 
         print(f"[mart] preparing BUT PPG (limit={args.limit}) ...")
-        registry = str(prepare_but_ppg(out_dir=Path(registry).parent, limit=args.limit))
+        registry = str(prepare_but_ppg(out_dir=Path(registry).parent, limit=args.limit, workers=args.workers))
         print(f"[mart] registry -> {registry}")
 
     if args.make_split or not Path(split).exists():
-        from butppg.data.registry import load_registry
-        from butppg.data.splits import make_subject_split, save_split
-
-        print("[mart] building subject-wise split ...")
-        reg_df = load_registry(registry)
-        tr, va, te = make_subject_split(reg_df, seed=args.seed)
-        save_split(tr, va, te, split, seed=args.seed)
-        print(f"[mart] split -> {split}  (train {len(tr)} / val {len(va)} / test {len(te)} subjects)")
+        _build_split(registry, split, args.seed)
 
     models = ["sigma_ppg", "opentslm"] if args.model == "both" else [args.model]
     tasks = ["quality", "hr"] if args.task == "both" else [args.task]
@@ -87,6 +80,44 @@ def cmd_mart(args: argparse.Namespace) -> int:
                 )
                 counts = {k: v["records"] for k, v in m["splits"].items()}
             print(f"[mart] {model}/{task}: {counts} -> {out_root / task}")
+    return 0
+
+
+def _build_split(registry_path: str, split_path: str, seed: int) -> None:
+    from butppg.data.registry import load_registry
+    from butppg.data.splits import make_subject_split, save_split
+
+    reg_df = load_registry(registry_path)
+    tr, va, te = make_subject_split(reg_df, seed=seed)
+    save_split(tr, va, te, split_path, seed=seed)
+    print(f"[split] {split_path}  (train {len(tr)} / val {len(va)} / test {len(te)} subjects)")
+
+
+# --------------------------------------------------------------------------- #
+# ingest  (RAW layer)                                                         #
+# --------------------------------------------------------------------------- #
+def cmd_ingest(args: argparse.Namespace) -> int:
+    from butppg.data.raw import ingest_raw
+
+    ingest_raw(
+        raw_dir=args.raw_dir,
+        limit=args.limit,
+        include_acc=not args.no_acc,
+        skip_existing=not args.no_skip_existing,
+        workers=args.workers,
+    )
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# process  (raw -> processed windows + registry + split)                      #
+# --------------------------------------------------------------------------- #
+def cmd_process(args: argparse.Namespace) -> int:
+    from butppg.data.process import process_records
+
+    registry_path = process_records(raw_dir=args.raw_dir, out_dir=args.out_dir)
+    if args.make_split or not Path(args.split).exists():
+        _build_split(str(registry_path), args.split, args.seed)
     return 0
 
 
@@ -114,7 +145,14 @@ def cmd_train(args: argparse.Namespace) -> int:
         cfg["llm_id"] = resolve_llm_id(args.llm_id)
         cfg["ecg_init"] = args.ecg_init
     if args.model == "cnn1d":
-        cfg["model"] = {"arch": args.arch, "channels": ["ppg"]}
+        channels = ["ppg", "acc"] if args.input_variant in ("ppg_acc", "ppg_acc_cov") else ["ppg"]
+        cfg["model"] = {"arch": args.arch, "channels": channels}
+        cfg["input_variant"] = args.input_variant
+    if args.model == "baseline_features":
+        cfg["input_variant"] = args.input_variant
+        cfg["estimator"] = args.estimator
+    if args.model == "trivial":
+        cfg["method"] = args.method  # hr only: 'median' | 'dominant_frequency'
 
     run = create_run(args.model, args.task, config=cfg)
     print(f"[train] run_id = {run.run_id}")
@@ -196,8 +234,58 @@ def _download_weights(run, out_dir: Path) -> int:
 
 
 # --------------------------------------------------------------------------- #
+# cascade  (quality-gate -> HR scenario, section 2B)                          #
+# --------------------------------------------------------------------------- #
+def cmd_cascade(args: argparse.Namespace) -> int:
+    import json
+
+    from butppg.evaluation.evaluate import cascade_report
+    from butppg.orchestrator.runs import load_run
+
+    q_run = load_run(args.quality_run)
+    q_path = q_run.predictions_dir / "test_predictions.csv"
+    h_path = None
+    if args.hr_run:
+        h_path = load_run(args.hr_run).predictions_dir / "test_predictions.csv"
+
+    report = cascade_report(q_path, h_path)
+    print("[cascade] quality-gate -> HR (section 2B)")
+    print(f"  accepted fraction : {report['accepted_fraction']:.4f}  ({report['n_accepted']}/{report['n_test']})")
+    print(f"  false-reject rate : {_fmtopt(report['false_reject_rate'])}  (good windows wrongly rejected)")
+    print(f"  false-accept rate : {_fmtopt(report['false_accept_rate'])}  (bad windows wrongly accepted)")
+    if report.get("hr_metrics_on_accepted"):
+        m = report["hr_metrics_on_accepted"]
+        print(f"  HR on accepted    : MAE={m['mae']:.3f}  RMSE={m['rmse']:.3f}  (n={report['hr_windows_scored']})")
+
+    out = RESULTS_DIR / "tables" / f"cascade_{args.quality_run}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"[cascade] report -> {out}")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# table  (assemble comparison tables, section 10)                             #
+# --------------------------------------------------------------------------- #
+def cmd_table(args: argparse.Namespace) -> int:
+    from butppg.reporting.tables import write_comparison
+
+    paths = write_comparison()
+    print("[table] wrote:")
+    for _, p in paths.items():
+        print(f"  {p}")
+    print()
+    print((paths["main_md"]).read_text(encoding="utf-8"))
+    return 0
+
+
+# --------------------------------------------------------------------------- #
 # helpers                                                                     #
 # --------------------------------------------------------------------------- #
+def _fmtopt(v) -> str:
+    return f"{v:.4f}" if isinstance(v, (int, float)) else "n/a"
+
+
 def _primary(run) -> str:
     m = run.metrics or {}
     if run.task == "quality" and "macro_f1" in m:
@@ -233,11 +321,33 @@ def build_parser() -> argparse.ArgumentParser:
     m.add_argument("--prepare", action="store_true", help="download+preprocess BUT PPG first")
     m.add_argument("--limit", type=int, default=None, help="with --prepare: only N records (smoke test)")
     m.add_argument("--make-split", action="store_true", help="(re)build the subject-wise split")
+    m.add_argument("--workers", type=int, default=8, help="with --prepare: parallel download threads")
     m.add_argument("--target-fs", type=float, default=50.0, help="SIGMA-PPG resample rate")
     m.add_argument("--normalize", choices=["zscore", "minmax"], default="zscore")
     m.add_argument("--acc-mode", choices=["none", "magnitude", "axes"], default="magnitude", help="OpenTSLM ACC")
     m.add_argument("--seed", type=int, default=42)
     m.set_defaults(func=cmd_mart)
+
+    raw_default = str(PROJECT_ROOT / "data" / "raw")
+    processed_default = str(PROJECT_ROOT / "data" / "processed")
+
+    # ingest (RAW layer)
+    ing = sub.add_parser("ingest", help="download raw BUT PPG signals to data/raw (slow, cached)")
+    ing.add_argument("--raw-dir", default=raw_default)
+    ing.add_argument("--limit", type=int, default=None, help="only the first N records (smoke test)")
+    ing.add_argument("--no-acc", action="store_true", help="skip accelerometer download")
+    ing.add_argument("--no-skip-existing", action="store_true", help="re-download even if already cached")
+    ing.add_argument("--workers", type=int, default=8, help="parallel download threads (latency-bound; try 16)")
+    ing.set_defaults(func=cmd_ingest)
+
+    # process (raw -> processed + registry + split)
+    pr = sub.add_parser("process", help="build registry + processed windows + split from data/raw (fast, local)")
+    pr.add_argument("--raw-dir", default=raw_default)
+    pr.add_argument("--out-dir", default=processed_default)
+    pr.add_argument("--split", default=_default_split())
+    pr.add_argument("--make-split", action="store_true", help="(re)build the subject-wise split")
+    pr.add_argument("--seed", type=int, default=42)
+    pr.set_defaults(func=cmd_process)
 
     # train
     t = sub.add_parser("train", help="launch training of one model on one task")
@@ -252,6 +362,12 @@ def build_parser() -> argparse.ArgumentParser:
     t.add_argument("--batch-size", type=int, default=32)
     t.add_argument("--lr", type=float, default=1e-3)
     t.add_argument("--arch", default="resnet1d", help="cnn1d: cnn1d|resnet1d")
+    t.add_argument("--method", default="median", choices=["median", "dominant_frequency"],
+                   help="trivial hr baseline: median HR or dominant-frequency HR")
+    t.add_argument("--input-variant", default="ppg", choices=["ppg", "ppg_acc", "ppg_acc_cov"],
+                   help="input blocks for baseline_features/cnn1d (section 2A)")
+    t.add_argument("--estimator", default="logreg", choices=["logreg", "ridge", "xgboost"],
+                   help="baseline_features estimator (quality: logreg/xgboost; hr: ridge/xgboost)")
     t.add_argument("--checkpoint-path", default=None, help="sigma_ppg: pretrained SIGMA checkpoint")
     t.add_argument("--target-fs", type=float, default=50.0, help="sigma_ppg: mart resample rate")
     t.add_argument("--patch-size", type=int, default=None, help="sigma_ppg: patch size (default=target_fs)")
@@ -268,6 +384,16 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("run_id", nargs="?", default=None, help="omit to list all runs")
     r.add_argument("--download", default=None, metavar="DIR", help="export weights (+metrics+predictions) to DIR")
     r.set_defaults(func=cmd_results)
+
+    # cascade
+    c = sub.add_parser("cascade", help="quality-gate -> HR scenario metrics (section 2B)")
+    c.add_argument("--quality-run", required=True, help="run_id of a finished quality run (full test set)")
+    c.add_argument("--hr-run", default=None, help="optional run_id of an HR run (HR MAE on accepted windows)")
+    c.set_defaults(func=cmd_cascade)
+
+    # table
+    tb = sub.add_parser("table", help="assemble the section-10 comparison tables from finished runs")
+    tb.set_defaults(func=cmd_table)
 
     return p
 

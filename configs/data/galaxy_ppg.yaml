@@ -1,0 +1,12 @@
+# GalaxyPPG — external validation only (no training). HR prediction.
+# IMPORTANT: raw Galaxy Watch PPG is a REFLECTIVE sensor -> invert before analysis.
+dataset:
+  name: galaxy_ppg
+  version: GalaxyPPG
+  download_url: ""        # E7: fill in
+window:
+  invert_ppg: true
+  acc_fs: null
+report:
+  by_activity: true
+  highlight_activities: [walking, jogging, running]

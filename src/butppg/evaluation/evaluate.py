@@ -119,3 +119,39 @@ def evaluate_pipeline(quality_path: str | Path, hr_path: str | Path) -> dict[str
         "false_accept_rate": false_accept_rate,  # true-bad windows wrongly accepted
         "hr_metrics_on_accepted": hr_on_accepted,
     }
+
+
+def cascade_report(quality_path: str | Path, hr_path: str | Path | None = None) -> dict[str, Any]:
+    """Quality-gate -> HR scenario (section 2B), gate metrics on the FULL test set.
+
+    Unlike :func:`evaluate_pipeline`, the gate metrics (accepted fraction,
+    false-reject, false-accept) are computed from the quality prediction file
+    alone — which must cover the full test set — so they stay correct even when
+    the HR prediction file only holds good-quality windows (our HR models train
+    and predict on good windows). If ``hr_path`` is given, HR MAE/RMSE is also
+    reported over the accepted windows that appear in that HR file (labelled so
+    its scope is explicit).
+    """
+    q = load_predictions(quality_path)
+    if (q["task"] != "quality").any():
+        raise ValueError(f"{quality_path} is not a quality-task prediction file")
+
+    accepted = q["y_pred"] == 1
+    truly_good = q["y_true"] == 1
+    truly_bad = q["y_true"] == 0
+    result: dict[str, Any] = {
+        "quality_file": str(quality_path),
+        "n_test": int(len(q)),
+        "n_accepted": int(accepted.sum()),
+        "accepted_fraction": float(accepted.mean()),
+        "false_reject_rate": float((~accepted & truly_good).sum() / truly_good.sum()) if truly_good.sum() else None,
+        "false_accept_rate": float((accepted & truly_bad).sum() / truly_bad.sum()) if truly_bad.sum() else None,
+    }
+    if hr_path is not None:
+        hr = load_predictions(hr_path)
+        accepted_ids = set(q.loc[accepted, "record_id"])
+        gated = hr[hr["record_id"].isin(accepted_ids)]
+        result["hr_file"] = str(hr_path)
+        result["hr_windows_scored"] = int(len(gated))
+        result["hr_metrics_on_accepted"] = hr_metrics(gated["y_true"], gated["y_pred"]) if len(gated) else None
+    return result

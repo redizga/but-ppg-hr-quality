@@ -14,24 +14,52 @@ import pandas as pd
 
 from butppg.data.marts import load_registry_with_split
 from butppg.evaluation.evaluate import evaluate_prediction_file
+from butppg.metrics import PREDICTION_COLUMNS
 from butppg.metrics.predictions import save_predictions
 from butppg.orchestrator.runs import RunRecord
 
 
-def load_split_frames(registry_path, split_path, task: str, good_quality_only: bool = True):
+def build_prediction_frame(df, task: str, y_pred, prob_good=None):
+    """Assemble a canonical prediction frame from a test slice + predictions."""
+    out = pd.DataFrame(
+        {
+            "record_id": df["record_id"].values,
+            "subject_id": df["subject_id"].values,
+            "task": task,
+            "y_true": df["quality_label"].values if task == "quality" else df["hr_ref"].values,
+            "y_pred": y_pred,
+            "prob_good": prob_good if prob_good is not None else pd.NA,
+            "raw_response": pd.NA,
+            "parse_status": pd.NA,
+        }
+    )
+    return out[PREDICTION_COLUMNS]
+
+
+def load_split_frames(
+    registry_path, split_path, task: str, good_quality_only: bool = True, acc_subset: bool = False
+):
     """Return (train_df, val_df, test_df) from the registry + split.
 
-    For ``task='hr'`` the train/val folds are filtered to good-quality windows
-    (assignment section 2B — HR is trained only on signals the labels mark
-    usable). The **test** fold is left intact; filtering the test set is the
-    caller's decision at evaluation time, not baked into the data here.
+    For ``task='hr'`` all three folds are filtered to good-quality windows
+    (assignment section 2B — the HR model operates only on signals the labels
+    mark usable, at train AND test time). Evaluating HR on bad-quality windows
+    would measure prediction on signals you'd never accept, and inflates MAE for
+    every model. The separate quality->HR cascade (``evaluate_pipeline``) is
+    where the quality gate is exercised instead.
+
+    ``acc_subset=True`` restricts every fold to records that have ACC — the fair
+    common subset for the extended-input variants (section 2A: PPG-only vs
+    PPG+ACC vs +covariates must be compared on the same records).
     """
     registry = load_registry_with_split(registry_path, split_path)
     frames = {}
     for split_name in ("train", "val", "test"):
         df = registry[registry["split"] == split_name].copy()
-        if task == "hr" and good_quality_only and split_name in ("train", "val"):
+        if task == "hr" and good_quality_only:
             df = df[df["quality_label"] == 1]
+        if acc_subset:
+            df = df[df["has_acc"] == True]  # noqa: E712 - pandas boolean mask
         frames[split_name] = df.reset_index(drop=True)
     return frames["train"], frames["val"], frames["test"]
 

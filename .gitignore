@@ -1,15 +1,16 @@
 # ---- data & large artifacts (never commit raw datasets or heavy outputs) ----
-data/
-artifacts/
-runs/
-!runs/.gitkeep
+# Anchored to the project root so they DON'T match src/butppg/data or configs/data.
+/data/
+/artifacts/
+/runs/
+!/runs/.gitkeep
 
 # ---- vendored upstream model repos (their own git history) ----
-OpenTSLM/
-SigmaPPG/
+/OpenTSLM/
+/SigmaPPG/
 
 # ---- previous versions (heavy: venvs, checkpoints) ----
-legacy/
+/legacy/
 
 # ---- python ----
 __pycache__/
@@ -33,6 +34,7 @@ env/
 !.env.example
 
 # ---- os / editor ----
+~$*
 .DS_Store
 .idea/
 .vscode/

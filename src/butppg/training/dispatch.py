@@ -35,9 +35,9 @@ def run_training(run: RunRecord, cfg: dict) -> None:
 
             train_opentslm(run, cfg)
         elif model == "baseline_features":
-            raise NotImplementedError(
-                "baseline_features (features + LogReg/XGBoost, E3) is not implemented yet."
-            )
+            from butppg.training.features import train_features
+
+            train_features(run, cfg)
         else:
             raise ValueError(f"no trainer for model {model!r}")
     except Exception as exc:
