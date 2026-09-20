@@ -116,6 +116,19 @@ def train_opentslm(run: RunRecord, cfg: dict) -> None:
     lr = float(train_cfg.get("lr", 1e-4))
     max_new_tokens = int(cfg.get("max_new_tokens", 32))
 
+    # Fail fast: validate the mart BEFORE the expensive model build + training,
+    # so a mart/field problem surfaces in milliseconds instead of after epochs.
+    for split in ("train", "val", "test"):
+        p = jsonl_dir / f"{split}.jsonl"
+        if not p.exists():
+            raise FileNotFoundError(
+                f"OpenTSLM mart missing: {p} — run `orch mart --model opentslm --acc-mode none`"
+            )
+    probe = _read_test_rows(jsonl_dir)
+    for col in ("record_id", "subject_id", "answer"):
+        if col not in probe.columns:
+            raise ValueError(f"OpenTSLM mart test.jsonl lacks '{col}' — rebuild the mart")
+
     model = OpenTSLMFlamingo(device=device, llm_id=llm_id)
     # OpenTSLMFlamingo puts the LLM on ``device`` but leaves the rest of the
     # Flamingo wrapper (perceiver, gated cross-attn) on CPU, and the trainable
@@ -216,6 +229,16 @@ def train_opentslm(run: RunRecord, cfg: dict) -> None:
             raw_responses.extend(preds if isinstance(preds, list) else [preds])
 
     test_rows = _read_test_rows(jsonl_dir)
+    # Older marts stored only the text ``answer``; recover the exact truth column
+    # the parser needs from it when the mart didn't carry it.
+    truth_col = "quality_label" if task == "quality" else "hr_ref"
+    if truth_col not in test_rows.columns or test_rows[truth_col].isna().all():
+        if task == "quality":
+            test_rows[truth_col] = (
+                test_rows["answer"].astype(str).str.strip().str.lower().eq("good").astype(int)
+            )
+        else:
+            test_rows[truth_col] = test_rows["answer"].astype(float)
     predictions = responses_to_predictions(test_rows, raw_responses, task=task)
     finalize_predictions(run, predictions)
     run.set_status("finished")
