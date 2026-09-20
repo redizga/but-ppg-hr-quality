@@ -23,13 +23,19 @@ from butppg.metrics.hr import hr_metrics
 from butppg.paths import PROJECT_ROOT
 from butppg.training.common import finalize_predictions, load_split_frames
 from butppg.orchestrator.runs import RunRecord
+from butppg.utils.progress import pbar
 
 
 ACC_LEN = 1000  # 10 s @ 100 Hz
 
 
 def _load_ppg_matrix(df: pd.DataFrame) -> np.ndarray:
-    return np.stack([load_ppg_window(r["ppg_path"], project_root=PROJECT_ROOT) for _, r in df.iterrows()])
+    return np.stack(
+        [
+            load_ppg_window(r["ppg_path"], project_root=PROJECT_ROOT)
+            for _, r in pbar(df.iterrows(), desc="load ppg", total=len(df), leave=False)
+        ]
+    )
 
 
 def _load_acc_matrix(df: pd.DataFrame) -> np.ndarray:
@@ -37,7 +43,7 @@ def _load_acc_matrix(df: pd.DataFrame) -> np.ndarray:
     from pathlib import Path
 
     out = []
-    for _, r in df.iterrows():
+    for _, r in pbar(df.iterrows(), desc="load acc", total=len(df), leave=False):
         path = Path(r["acc_path"])
         if not path.is_absolute():
             path = PROJECT_ROOT / path
@@ -138,7 +144,8 @@ def train_cnn(run: RunRecord, cfg: dict) -> None:
     for epoch in range(epochs):
         model.train()
         running, n_batches = 0.0, 0
-        for batch in loader:
+        bar = pbar(loader, desc=f"epoch {epoch + 1}/{epochs}", leave=False)
+        for batch in bar:
             if use_acc:
                 ppg_b, acc_b, yb = batch
             else:
@@ -151,6 +158,7 @@ def train_cnn(run: RunRecord, cfg: dict) -> None:
             opt.step()
             running += float(loss)
             n_batches += 1
+            bar.set_postfix(loss=f"{running / n_batches:.4f}")
         score = val_score()
         improved = score > best_score
         if improved:

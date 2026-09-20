@@ -33,6 +33,7 @@ from butppg.models.opentslm_parsing import responses_to_predictions
 from butppg.orchestrator.runs import RunRecord
 from butppg.paths import OPENTSLM_DIR
 from butppg.training.common import finalize_predictions
+from butppg.utils.progress import pbar
 
 
 def _require_opentslm():
@@ -145,17 +146,22 @@ def train_opentslm(run: RunRecord, cfg: dict) -> None:
 
     for epoch in range(epochs):
         model.train()
-        for batch in train_loader:
+        running, n_tr = 0.0, 0
+        bar = pbar(train_loader, desc=f"epoch {epoch + 1}/{epochs}", leave=False)
+        for batch in bar:
             optimizer.zero_grad()
             loss = model.compute_loss(batch)
             loss.backward()
             clip_grad_norm_((p for p in model.parameters() if p.requires_grad), 1.0)
             optimizer.step()
+            running += float(loss)
+            n_tr += 1
+            bar.set_postfix(loss=f"{running / n_tr:.4f}")
 
         model.eval()
         val_loss, n = 0.0, 0
         with torch.no_grad():
-            for batch in val_loader:
+            for batch in pbar(val_loader, desc=f"val {epoch + 1}/{epochs}", leave=False):
                 val_loss += float(model.compute_loss(batch))
                 n += 1
         val_loss = val_loss / max(n, 1)
@@ -172,7 +178,7 @@ def train_opentslm(run: RunRecord, cfg: dict) -> None:
     model.eval()
     raw_responses: List[str] = []
     with torch.no_grad():
-        for batch in test_loader:
+        for batch in pbar(test_loader, desc="generate (test)"):
             preds = model.generate(batch, max_new_tokens=max_new_tokens)
             raw_responses.extend(preds if isinstance(preds, list) else [preds])
 

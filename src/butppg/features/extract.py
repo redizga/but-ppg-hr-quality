@@ -22,6 +22,7 @@ from scipy.signal import periodogram
 from scipy.stats import kurtosis, skew
 
 from butppg.data.marts import load_ppg_window
+from butppg.utils.progress import pbar
 
 PPG_FS = 30.0
 ACC_FS = 100.0
@@ -118,7 +119,7 @@ def build_feature_matrix(df: pd.DataFrame, variant: str, project_root: str | Pat
         raise ValueError(f"unknown variant {variant!r}, expected one of {INPUT_VARIANTS}")
 
     rows: list[dict[str, float]] = []
-    for _, r in df.iterrows():
+    for _, r in pbar(df.iterrows(), desc=f"features[{variant}]", total=len(df)):
         feats = ppg_features(load_ppg_window(r["ppg_path"], project_root=project_root))
         if variant in ("ppg_acc", "ppg_acc_cov"):
             if bool(r.get("has_acc")) and isinstance(r.get("acc_path"), str) and r["acc_path"]:

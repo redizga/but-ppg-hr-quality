@@ -30,6 +30,7 @@ from butppg.metrics.quality import quality_metrics
 from butppg.paths import SIGMA_DIR
 from butppg.orchestrator.runs import RunRecord
 from butppg.training.common import finalize_predictions
+from butppg.utils.progress import pbar
 
 
 def _require_sigma_repo():
@@ -128,6 +129,8 @@ def train_sigma_ppg(run: RunRecord, cfg: dict) -> None:
     loader = DataLoader(TensorDataset(X_tr, y_tr), batch_size=batch_size, shuffle=True, drop_last=False)
 
     best_score, best_state = -np.inf, None
+    metric_name = "macro_f1" if task == "quality" else "mae"
+    print(f"[sigma] training on {device} for {epochs} epochs ({len(X_tr)} train windows)")
 
     def val_score():
         model.eval()
@@ -138,18 +141,29 @@ def train_sigma_ppg(run: RunRecord, cfg: dict) -> None:
             return quality_metrics(y_va.numpy().astype(int), pred)["macro_f1"]
         return -hr_metrics(y_va.numpy(), out)["mae"]
 
-    for _epoch in range(epochs):
+    for epoch in range(epochs):
         model.train()
-        for xb, yb in loader:
+        running, n_batches = 0.0, 0
+        bar = pbar(loader, desc=f"epoch {epoch + 1}/{epochs}", leave=False)
+        for xb, yb in bar:
             xb, yb = maybe_patch(xb.to(device)), yb.to(device)
             opt.zero_grad()
             loss = criterion(model(xb).squeeze(-1), yb)
             loss.backward()
             opt.step()
+            running += float(loss)
+            n_batches += 1
+            bar.set_postfix(loss=f"{running / n_batches:.4f}")
         score = val_score()
-        if score > best_score:
+        improved = score > best_score
+        if improved:
             best_score = score
             best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+        val_display = score if task == "quality" else -score
+        print(
+            f"[sigma] epoch {epoch + 1:>3}/{epochs}  loss={running / max(n_batches, 1):.4f}  "
+            f"val_{metric_name}={val_display:.4f}{'  *best' if improved else ''}"
+        )
 
     if best_state is not None:
         model.load_state_dict(best_state)
