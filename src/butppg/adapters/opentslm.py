@@ -117,6 +117,20 @@ def train_opentslm(run: RunRecord, cfg: dict) -> None:
     max_new_tokens = int(cfg.get("max_new_tokens", 32))
 
     model = OpenTSLMFlamingo(device=device, llm_id=llm_id)
+    # OpenTSLMFlamingo puts the LLM on ``device`` but leaves the rest of the
+    # Flamingo wrapper (perceiver, gated cross-attn) on CPU, and the trainable
+    # time-series encoder is hidden in a plain SimpleNamespace
+    # (``vision_encoder.visual``) that ``.to()`` won't recurse into. Both cause
+    # a cuda/cpu mismatch in the forward pass, so move them onto ``device``.
+    # ``dtype=float32``: OpenTSLM loads the LLM in bfloat16 but leaves the
+    # perceiver / TS encoder in float32, so their params clash ("expected
+    # BFloat16 but found Float"). Unify on float32 — the input series are float32
+    # and an A6000 has room for the 1B/3B model in fp32.
+    try:
+        model.model.to(device=device, dtype=torch.float32)          # perceiver + cross-attn + LLM
+        model.model.vision_encoder.visual.to(device=device, dtype=torch.float32)  # SimpleNamespace encoder
+    except AttributeError:
+        pass
     if ecg_init:
         # ECG->PPG transfer: warm-start from the ECG-stage checkpoint.
         model.load_from_file(ecg_init)
