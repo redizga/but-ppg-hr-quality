@@ -96,15 +96,17 @@ def build_main_rows(runs) -> list[dict]:
     ppg = [r for r in runs if _variant(r) == "ppg"]
     rows = []
     for label in MAIN_ORDER:
-        q = _latest_finished(ppg, lambda r: r.task == "quality" and run_label(r) == label)
-        h = _latest_finished(ppg, lambda r: r.task == "hr" and run_label(r) == label)
+        q = _latest_finished(ppg, lambda r: r.task == "quality" and _label_matches(label, run_label(r)))
+        h = _latest_finished(ppg, lambda r: r.task == "hr" and _label_matches(label, run_label(r)))
         if q is None and h is None:
             rows.append({"model": label, "_missing": True})
             continue
+        # Show the concrete run label (e.g. "OpenTSLM-1B"), not the placeholder.
+        display = run_label(q or h)
         qm = (q.metrics if q else {}) or {}
         hm = (h.metrics if h else {}) or {}
         rows.append({
-            "model": label,
+            "model": display,
             "quality_macro_f1": qm.get("macro_f1"),
             "quality_roc_auc": qm.get("roc_auc"),
             "quality_accuracy": qm.get("accuracy"),
