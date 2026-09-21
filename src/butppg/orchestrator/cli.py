@@ -18,7 +18,7 @@ import argparse
 import shutil
 from pathlib import Path
 
-from butppg.paths import MARTS_DIR, PROJECT_ROOT
+from butppg.paths import MARTS_DIR, PROJECT_ROOT, RESULTS_DIR
 
 # Short aliases for --llm-id so you don't type full HF repo ids. A value that is
 # not an alias is passed through verbatim (any HF repo id still works).
