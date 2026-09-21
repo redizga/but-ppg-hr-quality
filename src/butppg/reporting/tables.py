@@ -19,17 +19,31 @@ from pathlib import Path
 from butppg.orchestrator.runs import RunRecord, list_runs
 from butppg.paths import RESULTS_DIR
 
-# Row order for the main PPG-only table (assignment section 10).
+# Row order for the main PPG-only table (assignment section 10). The two
+# OpenTSLM entries are placeholders — the actual row label carries the LLM size
+# that was fine-tuned (e.g. "OpenTSLM-1B"), resolved from the run config.
 MAIN_ORDER = [
     "Majority class",
     "Median HR",
     "Dominant-frequency HR",
     "Features + LogReg/XGBoost",
     "1D-CNN / ResNet1D",
-    "OpenTSLM-3B",
-    "OpenTSLM-3B (ECG)",
+    "OpenTSLM",
+    "OpenTSLM (ECG)",
     "SIGMA-PPG",
 ]
+
+
+def _llm_size(cfg: dict) -> str:
+    """Human-readable LLM size from the run's llm_id (for the OpenTSLM label)."""
+    llm = str(cfg.get("llm_id", "")).lower()
+    for tag in ("270m", "1b", "3b", "7b", "8b"):
+        if tag in llm:
+            return tag.upper()
+    if "gemma" in llm:
+        return "Gemma"
+    tail = llm.split("/")[-1]
+    return tail or "?"
 
 
 def run_label(run: RunRecord) -> str:
@@ -46,8 +60,22 @@ def run_label(run: RunRecord) -> str:
     if m == "sigma_ppg":
         return "SIGMA-PPG"
     if m == "opentslm":
-        return "OpenTSLM-3B (ECG)" if cfg.get("ecg_init") else "OpenTSLM-3B"
+        base = f"OpenTSLM-{_llm_size(cfg)}"
+        return f"{base} (ECG)" if cfg.get("ecg_init") else base
     return m
+
+
+def _label_matches(placeholder: str, label: str) -> bool:
+    """Match a MAIN_ORDER placeholder to a concrete run label.
+
+    OpenTSLM rows are size-tagged at runtime ("OpenTSLM-1B"), so the fixed
+    placeholders match by family instead of exact string.
+    """
+    if placeholder == "OpenTSLM":
+        return label.startswith("OpenTSLM-") and not label.endswith("(ECG)")
+    if placeholder == "OpenTSLM (ECG)":
+        return label.startswith("OpenTSLM-") and label.endswith("(ECG)")
+    return label == placeholder
 
 
 def _variant(run: RunRecord) -> str:
@@ -68,15 +96,17 @@ def build_main_rows(runs) -> list[dict]:
     ppg = [r for r in runs if _variant(r) == "ppg"]
     rows = []
     for label in MAIN_ORDER:
-        q = _latest_finished(ppg, lambda r: r.task == "quality" and run_label(r) == label)
-        h = _latest_finished(ppg, lambda r: r.task == "hr" and run_label(r) == label)
+        q = _latest_finished(ppg, lambda r: r.task == "quality" and _label_matches(label, run_label(r)))
+        h = _latest_finished(ppg, lambda r: r.task == "hr" and _label_matches(label, run_label(r)))
         if q is None and h is None:
             rows.append({"model": label, "_missing": True})
             continue
+        # Show the concrete run label (e.g. "OpenTSLM-1B"), not the placeholder.
+        display = run_label(q or h)
         qm = (q.metrics if q else {}) or {}
         hm = (h.metrics if h else {}) or {}
         rows.append({
-            "model": label,
+            "model": display,
             "quality_macro_f1": qm.get("macro_f1"),
             "quality_roc_auc": qm.get("roc_auc"),
             "quality_accuracy": qm.get("accuracy"),

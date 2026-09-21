@@ -187,6 +187,8 @@ def _opentslm_record(row, task: str, acc_mode: str) -> dict:
         answer = str(int(round(float(row["hr_ref"]))))
         post_prompt = HR_POST_PROMPT
 
+    quality_label = row.get("quality_label")
+    hr_ref = row.get("hr_ref")
     return {
         "record_id": row["record_id"],
         "subject_id": row["subject_id"],
@@ -194,6 +196,11 @@ def _opentslm_record(row, task: str, acc_mode: str) -> dict:
         "time_series": time_series,
         "post_prompt": post_prompt,
         "answer": answer,
+        # Carry the exact ground truth so the OpenTSLM parser scores against the
+        # same labels the other models read from the registry (not the rounded
+        # text answer). NaN -> None so the JSONL stays valid JSON.
+        "quality_label": None if quality_label is None or (isinstance(quality_label, float) and np.isnan(quality_label)) else int(quality_label),
+        "hr_ref": None if hr_ref is None or (isinstance(hr_ref, float) and np.isnan(hr_ref)) else float(hr_ref),
     }
 
 

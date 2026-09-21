@@ -1,0 +1,15 @@
+{
+  "quality_file": "/workspace/but-ppg-hr-quality/runs/baseline_features_quality_20260920-210038_1282/predictions/test_predictions.csv",
+  "n_test": 751,
+  "n_accepted": 115,
+  "accepted_fraction": 0.15312916111850866,
+  "false_reject_rate": 0.644927536231884,
+  "false_accept_rate": 0.10766721044045677,
+  "hr_file": "/workspace/but-ppg-hr-quality/runs/baseline_features_hr_20260920-210224_29b0/predictions/test_predictions.csv",
+  "hr_windows_scored": 49,
+  "hr_metrics_on_accepted": {
+    "n": 49,
+    "mae": 5.5453590860172195,
+    "rmse": 7.066427789168518
+  }
+}

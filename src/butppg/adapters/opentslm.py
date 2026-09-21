@@ -116,6 +116,19 @@ def train_opentslm(run: RunRecord, cfg: dict) -> None:
     lr = float(train_cfg.get("lr", 1e-4))
     max_new_tokens = int(cfg.get("max_new_tokens", 32))
 
+    # Fail fast: validate the mart BEFORE the expensive model build + training,
+    # so a mart/field problem surfaces in milliseconds instead of after epochs.
+    for split in ("train", "val", "test"):
+        p = jsonl_dir / f"{split}.jsonl"
+        if not p.exists():
+            raise FileNotFoundError(
+                f"OpenTSLM mart missing: {p} — run `orch mart --model opentslm --acc-mode none`"
+            )
+    probe = _read_test_rows(jsonl_dir)
+    for col in ("record_id", "subject_id", "answer"):
+        if col not in probe.columns:
+            raise ValueError(f"OpenTSLM mart test.jsonl lacks '{col}' — rebuild the mart")
+
     model = OpenTSLMFlamingo(device=device, llm_id=llm_id)
     # OpenTSLMFlamingo puts the LLM on ``device`` but leaves the rest of the
     # Flamingo wrapper (perceiver, gated cross-attn) on CPU, and the trainable
@@ -157,6 +170,20 @@ def train_opentslm(run: RunRecord, cfg: dict) -> None:
     run.ensure_dirs()
     ckpt_path = run.checkpoints_dir / "best_model.pt"
     best_val = float("inf")
+    best_state = None
+
+    def snapshot_trainable():
+        # Only the params the optimizer updates (perceiver, gated cross-attn, LM
+        # input embeddings). The frozen LLM is re-loaded from HF, so persisting
+        # it would be a multi-GB fp32 dump that blows the volume quota. Kept on
+        # CPU so the snapshot survives to the end without holding GPU memory.
+        return {n: p.detach().cpu().clone() for n, p in model.named_parameters() if p.requires_grad}
+
+    def restore_trainable(state):
+        params = dict(model.named_parameters())
+        with torch.no_grad():
+            for n, v in state.items():
+                params[n].data.copy_(v.to(device))
 
     for epoch in range(epochs):
         model.train()
@@ -182,13 +209,18 @@ def train_opentslm(run: RunRecord, cfg: dict) -> None:
         _log(run, f"epoch {epoch + 1}/{epochs}  val_loss={val_loss:.4f}")
         if val_loss < best_val:
             best_val = val_loss
-            model.store_to_file(str(ckpt_path))
-            run.best_checkpoint = str(ckpt_path)
-            run.save()
+            best_state = snapshot_trainable()
 
-    # Best checkpoint -> generate on the fixed test fold.
-    if ckpt_path.exists():
-        model.load_from_file(str(ckpt_path))
+    # Restore the best epoch and persist a compact (trainable-only) checkpoint.
+    # OpenTSLM's own store_to_file/load_from_file mismatch key prefixes (it saves
+    # "perceiver.*" but loads "model.perceiver.*"), so they silently restore
+    # nothing; and dumping the frozen LLM blows the disk quota. We snapshot the
+    # trainable params in memory instead.
+    if best_state is not None:
+        restore_trainable(best_state)
+        torch.save(best_state, ckpt_path)
+        run.best_checkpoint = str(ckpt_path)
+        run.save()
     model.eval()
     raw_responses: List[str] = []
     with torch.no_grad():
@@ -197,6 +229,16 @@ def train_opentslm(run: RunRecord, cfg: dict) -> None:
             raw_responses.extend(preds if isinstance(preds, list) else [preds])
 
     test_rows = _read_test_rows(jsonl_dir)
+    # Older marts stored only the text ``answer``; recover the exact truth column
+    # the parser needs from it when the mart didn't carry it.
+    truth_col = "quality_label" if task == "quality" else "hr_ref"
+    if truth_col not in test_rows.columns or test_rows[truth_col].isna().all():
+        if task == "quality":
+            test_rows[truth_col] = (
+                test_rows["answer"].astype(str).str.strip().str.lower().eq("good").astype(int)
+            )
+        else:
+            test_rows[truth_col] = test_rows["answer"].astype(float)
     predictions = responses_to_predictions(test_rows, raw_responses, task=task)
     finalize_predictions(run, predictions)
     run.set_status("finished")
