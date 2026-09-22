@@ -35,7 +35,7 @@ nvidia-smi
 
 ```bash
 mkdir -p /root/.ssh && chmod 700 /root/.ssh
-ssh-keygen -t ed25519 -C "rsclashgml@gmail.com" -f /root/.ssh/id_ed25519 -N ""
+ssh-keygen -t ed25519 -C "**[email]**" -f /root/.ssh/id_ed25519 -N ""
 chmod 600 /root/.ssh/id_ed25519
 cat /root/.ssh/id_ed25519.pub
 ```
