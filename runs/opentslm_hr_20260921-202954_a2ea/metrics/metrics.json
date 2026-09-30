@@ -1,0 +1,13 @@
+{
+  "file": "/workspace/but-ppg-hr-quality/runs/opentslm_hr_20260921-202954_a2ea/predictions/test_predictions.csv",
+  "task": "hr",
+  "n_records": 138,
+  "n_scored": 138,
+  "n_invalid_responses": 0,
+  "invalid_response_fraction": 0.0,
+  "metrics": {
+    "n": 138,
+    "mae": 11.405797101449275,
+    "rmse": 14.925903949029426
+  }
+}
