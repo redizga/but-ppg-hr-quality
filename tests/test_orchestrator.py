@@ -96,3 +96,30 @@ def test_trivial_training_run(tmp_path):
         assert (reloaded.predictions_dir / "test_predictions.csv").exists()
     finally:
         shutil.rmtree(run.dir, ignore_errors=True)
+
+
+def test_predict_from_features_checkpoint(tmp_path):
+    """orch predict: train a features model, then reload its weights and predict
+    on the test fold (section 8's inference-from-checkpoint path)."""
+    from butppg.inference.predict import predict_run
+    from butppg.orchestrator.runs import create_run
+    from butppg.training.dispatch import run_training
+
+    reg, subjects = _make_registry(tmp_path)
+    split = _make_split(tmp_path, subjects)
+    cfg = {"registry": str(reg), "split": str(split), "input_variant": "ppg", "estimator": "logreg"}
+    train_run = create_run("baseline_features", "quality", config=cfg)
+    pred_run = None
+    try:
+        run_training(train_run, cfg)
+        assert train_run.status == "finished"
+        pred_run = predict_run(train_run.run_id, registry=str(reg), split_path=str(split), split="test", tag="unit")
+        assert pred_run.status == "finished"
+        preds = pd.read_csv(pred_run.predictions_dir / "test_predictions.csv")
+        assert len(preds) > 0
+        assert set(preds["task"].unique()) == {"quality"}
+        assert preds["y_pred"].notna().all()
+    finally:
+        shutil.rmtree(train_run.dir, ignore_errors=True)
+        if pred_run is not None:
+            shutil.rmtree(pred_run.dir, ignore_errors=True)

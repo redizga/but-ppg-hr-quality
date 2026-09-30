@@ -18,7 +18,7 @@ import argparse
 import shutil
 from pathlib import Path
 
-from butppg.paths import MARTS_DIR, PROJECT_ROOT, RESULTS_DIR
+from butppg.paths import MARTS_DIR, PROJECT_ROOT, RESULTS_DIR, SPLITS_DIR
 
 # Short aliases for --llm-id so you don't type full HF repo ids. A value that is
 # not an alias is passed through verbatim (any HF repo id still works).
@@ -280,6 +280,114 @@ def cmd_table(args: argparse.Namespace) -> int:
 
 
 # --------------------------------------------------------------------------- #
+# predict  (run a trained model on new data from its checkpoint, section 8)   #
+# --------------------------------------------------------------------------- #
+def cmd_predict(args: argparse.Namespace) -> int:
+    from butppg.inference.predict import predict_run
+
+    run = predict_run(
+        args.run, registry=args.registry, split_path=args.split_path,
+        split=args.split, mart_dir=args.mart_dir, tag=args.tag,
+    )
+    print(f"[predict] {run.run_id}  status={run.status}  (weights from {args.run})")
+    _print_metrics(run.metrics or {})
+    print(f"[predict] run dir: {run.dir}")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# galaxy  (build GalaxyPPG registry for external validation, section 8)       #
+# --------------------------------------------------------------------------- #
+def cmd_galaxy(args: argparse.Namespace) -> int:
+    import pandas as pd
+
+    from butppg.data.galaxy import build_galaxy_registry
+    from butppg.data.splits import save_split
+
+    reg_path = build_galaxy_registry(args.raw_dir, args.out, invert_ppg=not args.no_invert)
+    reg = pd.read_csv(reg_path, dtype={"subject_id": str})
+    subs = sorted(reg["subject_id"].unique())
+    split_path = Path(args.out) / "galaxy_all_test.json"
+    save_split([], [], subs, split_path, seed=42, ratios=(0.0, 0.0, 1.0))
+    print(f"[galaxy] all-test split -> {split_path}  ({len(subs)} subjects, all test)")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# activity-report  (GalaxyPPG HR stratified by activity, section 8)           #
+# --------------------------------------------------------------------------- #
+def cmd_activity_report(args: argparse.Namespace) -> int:
+    import json
+
+    from butppg.evaluation.evaluate import activity_report
+    from butppg.orchestrator.runs import load_run
+    from butppg.reporting.galaxy_table import write_galaxy_table
+
+    hr_path = load_run(args.hr_run).predictions_dir / "test_predictions.csv"
+    q_path = load_run(args.quality_run).predictions_dir / "test_predictions.csv" if args.quality_run else None
+    rep = activity_report(hr_path, args.registry, q_path)
+
+    print("[galaxy] external HR validation")
+    ov = rep.get("overall") or {}
+    print(f"  overall: MAE={_fmtopt(ov.get('mae'))}  RMSE={_fmtopt(ov.get('rmse'))}  (n={rep['n_scored']})")
+    for act, m in sorted(rep["per_activity"].items()):
+        print(f"    {act:<16} MAE={m['mae']:.3f}  RMSE={m['rmse']:.3f}  (n={m['n']})")
+    if "accepted_fraction" in rep:
+        print(f"  quality-accepted fraction: {_fmtopt(rep['accepted_fraction'])}")
+
+    out = RESULTS_DIR / "tables" / f"galaxy_{args.hr_run}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(rep, indent=2, ensure_ascii=False), encoding="utf-8")
+    md = write_galaxy_table(rep, RESULTS_DIR / "tables" / "galaxy_activity.md")
+    print(f"[galaxy] report -> {out}\n[galaxy] table -> {md}")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# lowdata-subsets  (nested train subsets for the low-data study, section 9)   #
+# --------------------------------------------------------------------------- #
+def cmd_lowdata_subsets(args: argparse.Namespace) -> int:
+    import json
+
+    from butppg.data.splits import load_split, make_low_data_subsets, save_split
+
+    base = load_split(args.split)
+    fracs = [float(x) for x in args.fractions.split(",")]
+    seeds = [int(x) for x in args.seeds.split(",")]
+    outdir = Path(args.out)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    made = []
+    for s in seeds:
+        subsets = make_low_data_subsets(base["train_subjects"], fracs, seed=s)
+        for f, train_subs in subsets.items():
+            path = outdir / f"f{int(round(f * 100))}_s{s}.json"
+            save_split(train_subs, base["val_subjects"], base["test_subjects"], path,
+                       seed=s, ratios=base.get("ratios", (0.6, 0.2, 0.2)))
+            d = json.loads(path.read_text(encoding="utf-8"))
+            d["low_data"] = {"fraction": f, "seed": s, "n_train_subjects": len(train_subs)}
+            path.write_text(json.dumps(d, indent=2), encoding="utf-8")
+            made.append(path)
+    print(f"[lowdata] wrote {len(made)} split files to {outdir}/ (fractions={fracs}, seeds={seeds})")
+    print("  train each model per split, e.g.:")
+    print(f"    orch train --model baseline_features --task quality --split {made[0]}")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# lowdata-table  (aggregate low-data runs -> curves + tables, section 9/10)   #
+# --------------------------------------------------------------------------- #
+def cmd_lowdata_table(args: argparse.Namespace) -> int:
+    from butppg.reporting.lowdata import write_low_data_report
+
+    paths = write_low_data_report()
+    print("[lowdata] wrote:")
+    for _, p in paths.items():
+        print(f"  {p}")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
 # helpers                                                                     #
 # --------------------------------------------------------------------------- #
 def _fmtopt(v) -> str:
@@ -394,6 +502,42 @@ def build_parser() -> argparse.ArgumentParser:
     # table
     tb = sub.add_parser("table", help="assemble the section-10 comparison tables from finished runs")
     tb.set_defaults(func=cmd_table)
+
+    # predict (inference from a trained checkpoint, section 8)
+    pd_ = sub.add_parser("predict", help="run a trained model on new data from its checkpoint (no retraining)")
+    pd_.add_argument("--run", required=True, help="run_id of a finished run whose weights to load")
+    pd_.add_argument("--registry", default=None, help="target registry (registry models); default = training registry")
+    pd_.add_argument("--split-path", default=None, help="split file to slice the registry (omit for whole registry)")
+    pd_.add_argument("--split", default="test", help="which fold when --split-path given (default test; 'all')")
+    pd_.add_argument("--mart-dir", default=None, help="target mart dir (sigma_ppg/opentslm); default = training mart")
+    pd_.add_argument("--tag", default="predict", help="label for the output run id")
+    pd_.set_defaults(func=cmd_predict)
+
+    # galaxy (build GalaxyPPG registry, section 8)
+    gx = sub.add_parser("galaxy", help="build GalaxyPPG registry + all-test split for external validation")
+    gx.add_argument("--raw-dir", required=True, help="extracted GalaxyPPG release dir (Zenodo 10.5281/zenodo.14635823)")
+    gx.add_argument("--out", default=str(PROJECT_ROOT / "data" / "galaxy"))
+    gx.add_argument("--no-invert", action="store_true", help="do NOT invert PPG (default inverts: reflective sensor)")
+    gx.set_defaults(func=cmd_galaxy)
+
+    # activity-report (GalaxyPPG HR by activity, section 8)
+    ar = sub.add_parser("activity-report", help="GalaxyPPG HR MAE overall + per activity (section 8)")
+    ar.add_argument("--hr-run", required=True, help="run_id of an HR predict-run on GalaxyPPG")
+    ar.add_argument("--registry", required=True, help="GalaxyPPG registry.csv (has the activity column)")
+    ar.add_argument("--quality-run", default=None, help="optional quality predict-run on GalaxyPPG (accept fraction)")
+    ar.set_defaults(func=cmd_activity_report)
+
+    # lowdata-subsets (nested train subsets, section 9)
+    ls = sub.add_parser("lowdata-subsets", help="generate nested train subsets (val/test fixed) for the low-data study")
+    ls.add_argument("--split", default=_default_split(), help="base split to shrink the train fold of")
+    ls.add_argument("--fractions", default="0.25,0.5,1.0", help="comma-separated train fractions")
+    ls.add_argument("--seeds", default="0,1,2", help="comma-separated seeds (>=3 for 25/50%%)")
+    ls.add_argument("--out", default=str(SPLITS_DIR / "lowdata"))
+    ls.set_defaults(func=cmd_lowdata_subsets)
+
+    # lowdata-table (aggregate low-data runs, section 9/10)
+    lt = sub.add_parser("lowdata-table", help="aggregate low-data runs -> curves (Macro-F1/MAE vs N) + tables")
+    lt.set_defaults(func=cmd_lowdata_table)
 
     return p
 

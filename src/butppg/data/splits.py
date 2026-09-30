@@ -171,5 +171,43 @@ def make_subject_split(
     return sorted(train), sorted(val), sorted(test)
 
 
-def make_low_data_subsets(*args, **kwargs):  # pragma: no cover - E8
-    raise NotImplementedError("E8 (Both): implement nested low-data subsets")
+def make_low_data_subsets(
+    train_subjects: Sequence[str],
+    fractions: Sequence[float] = (0.25, 0.5, 1.0),
+    seed: int = 42,
+) -> dict[float, list[str]]:
+    """Nested subject subsets of the TRAIN fold for the low-data study (section 9).
+
+    Only the training fold shrinks; val/test stay fixed (the caller keeps them).
+    Subsets are **nested** — the subjects in the 25% subset are a subset of the
+    50% subset, which is a subset of 100% — by shuffling the train subjects once
+    (deterministically, with ``seed``) and taking growing prefixes. Running with
+    several seeds (assignment: >=3 for 25%/50%) reshuffles the prefixes, giving
+    the spread the report shows as mean +/- std.
+
+    Returns ``{fraction: sorted(subject_list)}``. Each subset has at least one
+    subject; ``1.0`` always returns the full train fold.
+    """
+    subjects = sorted(str(s) for s in train_subjects)
+    n = len(subjects)
+    if n == 0:
+        raise ValueError("train_subjects is empty")
+    for f in fractions:
+        if not 0.0 < f <= 1.0:
+            raise ValueError(f"fractions must be in (0, 1], got {f}")
+
+    import random
+
+    shuffled = subjects.copy()
+    random.Random(seed).shuffle(shuffled)
+
+    out: dict[float, list[str]] = {}
+    for f in sorted(fractions):
+        k = n if f >= 1.0 else max(1, round(f * n))
+        out[f] = sorted(shuffled[:k])
+    # sanity: nesting (each smaller subset ⊆ the next larger one)
+    ordered = [out[f] for f in sorted(out)]
+    for smaller, larger in zip(ordered, ordered[1:]):
+        if not set(smaller) <= set(larger):
+            raise AssertionError("low-data subsets are not nested")  # pragma: no cover
+    return out

@@ -24,6 +24,9 @@ data = ["wfdb>=4.1"]
 # 1D-CNN / ResNet1D baseline + SIGMA-PPG / OpenTSLM adapters.
 deep = ["torch>=2.1", "einops>=0.7"]
 baselines = ["xgboost>=2.0"]
+# GalaxyPPG reference-HR from ECG (section 8) + report figures (section 9).
+galaxy = ["neurokit2>=0.2"]
+viz = ["matplotlib>=3.5"]
 dev = ["pytest>=7.4", "ruff>=0.1"]
 
 [project.scripts]

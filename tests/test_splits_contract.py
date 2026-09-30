@@ -199,3 +199,27 @@ def test_make_subject_split_rejects_unknown_balance_column():
     registry = _synthetic_registry(n_subjects=10)
     with pytest.raises(ValueError, match="not in registry"):
         make_subject_split(registry, balance_on=("does_not_exist",))
+
+
+def test_low_data_subsets_nested_and_sized():
+    from butppg.data.splits import make_low_data_subsets
+
+    train = [f"S{i:03d}" for i in range(20)]
+    subs = make_low_data_subsets(train, fractions=(0.25, 0.5, 1.0), seed=42)
+    assert sorted(subs) == [0.25, 0.5, 1.0]
+    assert len(subs[0.25]) == 5 and len(subs[0.5]) == 10 and len(subs[1.0]) == 20
+    # nested: 25% ⊂ 50% ⊂ 100%
+    assert set(subs[0.25]) <= set(subs[0.5]) <= set(subs[1.0])
+    assert set(subs[1.0]) == set(train)
+
+
+def test_low_data_subsets_deterministic_and_seed_varies():
+    from butppg.data.splits import make_low_data_subsets
+
+    train = [f"S{i:03d}" for i in range(20)]
+    a = make_low_data_subsets(train, (0.25, 0.5, 1.0), seed=1)
+    b = make_low_data_subsets(train, (0.25, 0.5, 1.0), seed=1)
+    c = make_low_data_subsets(train, (0.25, 0.5, 1.0), seed=2)
+    assert a[0.25] == b[0.25]            # same seed -> same subset
+    assert a[0.25] != c[0.25]            # different seed -> (very likely) different subset
+    assert set(a[0.25]) <= set(a[0.5])   # still nested under a different seed

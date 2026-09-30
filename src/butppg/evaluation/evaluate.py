@@ -19,6 +19,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
+
 from butppg.metrics.hr import hr_metrics
 from butppg.metrics.predictions import load_predictions
 from butppg.metrics.quality import quality_metrics
@@ -166,4 +168,44 @@ def cascade_report(quality_path: str | Path, hr_path: str | Path | None = None) 
         result["hr_file"] = _rel(hr_path)
         result["hr_windows_scored"] = int(len(gated))
         result["hr_metrics_on_accepted"] = hr_metrics(gated["y_true"], gated["y_pred"]) if len(gated) else None
+    return result
+
+
+def activity_report(
+    hr_pred_path: str | Path,
+    registry_path: str | Path,
+    quality_pred_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """GalaxyPPG external HR validation, stratified by activity (section 8).
+
+    Joins an HR prediction file to the GalaxyPPG registry (``record_id`` ->
+    ``activity``) and reports overall MAE/RMSE plus per-activity MAE/RMSE, so
+    the report can show where models degrade (walking/jogging/running). If a
+    quality prediction file is given, the fraction of windows its classifier
+    accepted as good is added.
+    """
+    hr = load_predictions(hr_pred_path)
+    if (hr["task"] != "hr").any():
+        raise ValueError(f"{hr_pred_path} is not an hr-task prediction file")
+    reg = pd.read_csv(Path(registry_path), dtype={"record_id": str})
+    if "activity" not in reg.columns:
+        raise ValueError(f"{registry_path} has no 'activity' column (needed for per-activity metrics)")
+
+    merged = hr.merge(reg[["record_id", "activity"]], on="record_id", how="left")
+    scored = merged[merged["y_pred"].notna()]
+    result: dict[str, Any] = {
+        "hr_file": _rel(hr_pred_path),
+        "registry": _rel(registry_path),
+        "n_windows": int(len(merged)),
+        "n_scored": int(len(scored)),
+        "overall": hr_metrics(scored["y_true"], scored["y_pred"]) if len(scored) else None,
+        "per_activity": {
+            str(act): {**hr_metrics(g["y_true"], g["y_pred"]), "n": int(len(g))}
+            for act, g in scored.groupby("activity") if len(g)
+        },
+    }
+    if quality_pred_path is not None:
+        q = load_predictions(quality_pred_path)
+        result["quality_file"] = _rel(quality_pred_path)
+        result["accepted_fraction"] = float((q["y_pred"] == 1).mean()) if len(q) else None
     return result
