@@ -140,16 +140,20 @@ def _acc_magnitude(acc_path: str, project_root: Path) -> np.ndarray | None:
     return np.linalg.norm(arr, axis=0)
 
 
-def _opentslm_record(row, task: str, acc_mode: str) -> dict:
-    ppg = load_ppg_window(row["ppg_path"], project_root=PROJECT_ROOT)
-    ppg_norm, mean, std = zscore(ppg)
+def _opentslm_record(row, task: str, acc_mode: str, signal: str = "ppg") -> dict:
+    # ``signal='ecg'`` builds the ECG-pretraining mart (section 6, ECG->PPG
+    # transfer): the time series is the ECG window instead of PPG, everything
+    # else (prompt, HR answer) identical so the two stages share one pipeline.
+    path_col, label = ("ecg_path", "ECG") if signal == "ecg" else ("ppg_path", "PPG")
+    sig = load_ppg_window(row[path_col], project_root=PROJECT_ROOT)
+    sig_norm, mean, std = zscore(sig)
     time_series = [
         {
-            "text": f"This is the PPG signal, it has mean {mean:.4f} and std {std:.4f}.",
-            "series": ppg_norm.tolist(),
+            "text": f"This is the {label} signal, it has mean {mean:.4f} and std {std:.4f}.",
+            "series": sig_norm.tolist(),
         }
     ]
-    if acc_mode != "none" and bool(row.get("has_acc")) and row.get("acc_path"):
+    if signal == "ppg" and acc_mode != "none" and bool(row.get("has_acc")) and row.get("acc_path"):
         if acc_mode == "magnitude":
             mag = _acc_magnitude(row["acc_path"], PROJECT_ROOT)
             if mag is not None:
@@ -212,6 +216,7 @@ def build_opentslm_mart(
     acc_mode: str = "magnitude",
     good_quality_only: bool = True,
     seed: int = 42,
+    signal: str = "ppg",
 ) -> dict:
     """Write the OpenTSLM mart for one task. Returns a small manifest dict.
 
@@ -224,11 +229,14 @@ def build_opentslm_mart(
     registry = load_registry_with_split(registry_path, split_path)
     if task == "hr" and good_quality_only:
         registry = registry[registry["quality_label"] == 1]
+    if signal == "ecg":
+        registry = registry[registry.get("has_ecg", False) == True]  # noqa: E712
 
     out_task = Path(out_root) / task
     out_task.mkdir(parents=True, exist_ok=True)
     manifest = {
         "model": "opentslm",
+        "signal": signal,
         "task": task,
         "acc_mode": acc_mode,
         "good_quality_only": good_quality_only if task == "hr" else None,
@@ -243,7 +251,7 @@ def build_opentslm_mart(
         n = 0
         with open(out_path, "w", encoding="utf-8") as f:
             for _, row in subset.iterrows():
-                f.write(json.dumps(_opentslm_record(row, task, acc_mode)) + "\n")
+                f.write(json.dumps(_opentslm_record(row, task, acc_mode, signal)) + "\n")
                 n += 1
         manifest["splits"][split_name] = {"records": n}
 

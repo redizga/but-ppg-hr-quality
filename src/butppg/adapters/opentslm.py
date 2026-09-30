@@ -144,9 +144,6 @@ def train_opentslm(run: RunRecord, cfg: dict) -> None:
         model.model.vision_encoder.visual.to(device=device, dtype=torch.float32)  # SimpleNamespace encoder
     except AttributeError:
         pass
-    if ecg_init:
-        # ECG->PPG transfer: warm-start from the ECG-stage checkpoint.
-        model.load_from_file(ecg_init)
 
     ds_cls = _make_dataset_class()
     _reset_dataset_cache(ds_cls)
@@ -183,7 +180,15 @@ def train_opentslm(run: RunRecord, cfg: dict) -> None:
         params = dict(model.named_parameters())
         with torch.no_grad():
             for n, v in state.items():
-                params[n].data.copy_(v.to(device))
+                if n in params:
+                    params[n].data.copy_(v.to(device))
+
+    if ecg_init:
+        # ECG->PPG transfer (assignment section 6): warm-start the trainable
+        # params from our ECG-stage compact checkpoint. Same architecture and
+        # input length as the PPG stage, so the param names line up directly.
+        restore_trainable(torch.load(ecg_init, map_location=device, weights_only=False))
+        _log(run, f"[opentslm] warm-started from ECG checkpoint {ecg_init}")
 
     for epoch in range(epochs):
         model.train()

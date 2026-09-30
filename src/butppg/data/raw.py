@@ -53,8 +53,11 @@ def _download_acc(record_id: str) -> np.ndarray | None:
     return acc.T if acc.shape[1] == 3 else acc  # -> (3, T)
 
 
-def _ingest_one(record_id: str, ppg_dir: Path, acc_dir: Path, include_acc: bool, skip_existing: bool) -> str | None:
-    """Download one record's PPG (+ACC) into the raw cache. Returns an error string or None.
+def _ingest_one(
+    record_id: str, ppg_dir: Path, acc_dir: Path, ecg_dir: Path,
+    include_acc: bool, include_ecg: bool, skip_existing: bool,
+) -> str | None:
+    """Download one record's PPG (+ACC, +ECG) into the raw cache. Returns an error string or None.
 
     The download is per-record and independent, so this is what the thread pool
     fans out. BUT PPG is latency-bound (many tiny files, high round-trip cost),
@@ -80,6 +83,18 @@ def _ingest_one(record_id: str, ppg_dir: Path, acc_dir: Path, include_acc: bool,
             acc = _download_acc(record_id)
             if acc is not None:
                 np.save(acc_out, acc)
+
+    if include_ecg:
+        # ECG (1000 Hz) — reference-HR source AND the signal for the OpenTSLM
+        # ECG-pretraining stage (assignment section 6, ECG->PPG transfer).
+        ecg_out = ecg_dir / f"{record_id}.npy"
+        if not (skip_existing and ecg_out.exists()):
+            try:
+                rec = wfdb.rdrecord(f"{record_id}_ECG", pn_dir=f"{PN_DIR_ROOT}/{record_id}")
+                ecg = np.asarray(rec.p_signal, dtype=np.float32)
+                np.save(ecg_out, ecg[:, 0] if ecg.ndim == 2 else ecg)
+            except Exception:  # noqa: BLE001 - ECG missing for a record is non-fatal
+                pass
     return None
 
 
@@ -87,6 +102,7 @@ def ingest_raw(
     raw_dir: str | Path = "data/raw",
     limit: int | None = None,
     include_acc: bool = True,
+    include_ecg: bool = False,
     skip_existing: bool = True,
     workers: int = 8,
 ) -> Path:
@@ -102,9 +118,12 @@ def ingest_raw(
     raw = Path(raw_dir)
     ppg_dir = raw / "ppg"
     acc_dir = raw / "acc"
+    ecg_dir = raw / "ecg"
     ppg_dir.mkdir(parents=True, exist_ok=True)
     if include_acc:
         acc_dir.mkdir(parents=True, exist_ok=True)
+    if include_ecg:
+        ecg_dir.mkdir(parents=True, exist_ok=True)
 
     # cache the annotation CSVs locally so `process` needs no network at all
     for name in ANNOTATION_FILES:
@@ -122,7 +141,7 @@ def ingest_raw(
     workers = max(1, int(workers))
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
-            pool.submit(_ingest_one, rid, ppg_dir, acc_dir, include_acc, skip_existing): rid
+            pool.submit(_ingest_one, rid, ppg_dir, acc_dir, ecg_dir, include_acc, include_ecg, skip_existing): rid
             for rid in ids
         }
         for fut in tqdm(as_completed(futures), total=len(futures), desc=f"ingest BUT PPG (x{workers})"):

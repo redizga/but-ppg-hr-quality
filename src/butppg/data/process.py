@@ -68,10 +68,14 @@ def process_records(raw_dir: str | Path = "data/raw", out_dir: str | Path = "dat
     that were never ingested (missing raw ``.npz``) are skipped. Returns the
     registry path.
     """
+    from butppg.data.marts import resample_window
+
     raw = Path(raw_dir)
     out = Path(out_dir)
     ppg_out_dir = out / "ppg"
     ppg_out_dir.mkdir(parents=True, exist_ok=True)
+    ecg_out_dir = out / "ecg"
+    ECG_FS_RAW, ECG_FS_OUT, ECG_LEN = 1000.0, 30.0, 300  # resample ECG to the PPG grid
 
     ann_path = raw / "quality-hr-ann.csv"
     if not ann_path.exists():
@@ -103,6 +107,21 @@ def process_records(raw_dir: str | Path = "data/raw", out_dir: str | Path = "dat
         has_acc = raw_acc.exists()
         acc_path = str(raw_acc) if has_acc else ""
 
+        # ECG (optional, ingested with --with-ecg): resample 1000Hz -> 30Hz/300
+        # to sit on the same grid as PPG, for the OpenTSLM ECG-pretraining stage.
+        raw_ecg = raw / "ecg" / f"{record_id}.npy"
+        has_ecg = raw_ecg.exists()
+        ecg_path = ""
+        if has_ecg:
+            try:
+                ecg_raw = np.load(raw_ecg).astype(np.float32).ravel()
+                ecg = resample_window(ecg_raw, ECG_FS_RAW, ECG_FS_OUT)[:ECG_LEN].astype(np.float32)
+                ecg_out_dir.mkdir(parents=True, exist_ok=True)
+                ecg_path = str(ecg_out_dir / f"{record_id}.npy")
+                np.save(ecg_path, ecg)
+            except Exception:  # noqa: BLE001
+                has_ecg, ecg_path = False, ""
+
         meta = subject_info.loc[record_id] if record_id in subject_info.index else None
         rows.append(
             {
@@ -112,8 +131,10 @@ def process_records(raw_dir: str | Path = "data/raw", out_dir: str | Path = "dat
                 "quality_label": int(row["Quality"]),
                 "hr_ref": float(row["HR"]),
                 "has_acc": has_acc,
+                "has_ecg": has_ecg,
                 "ppg_path": str(ppg_path),
                 "acc_path": acc_path,
+                "ecg_path": ecg_path,
                 "measurement_site": ("finger" if meta is not None and meta["Ear/finger"] == 1 else "ear"),
                 "sex": meta["Gender"] if meta is not None else "",
                 "age": meta["Age [years]"] if meta is not None else None,

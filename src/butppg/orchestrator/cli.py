@@ -65,9 +65,13 @@ def cmd_mart(args: argparse.Namespace) -> int:
     models = ["sigma_ppg", "opentslm"] if args.model == "both" else [args.model]
     tasks = ["quality", "hr"] if args.task == "both" else [args.task]
 
+    signal = getattr(args, "signal", "ppg")
+    if signal == "ecg":
+        models = ["opentslm"]  # ECG-pretraining stage is OpenTSLM-only (section 6)
     for model in models:
         for task in tasks:
-            out_root = Path(args.out) / model
+            suffix = "_ecg" if (model == "opentslm" and signal == "ecg") else ""
+            out_root = Path(args.out) / f"{model}{suffix}"
             if model == "sigma_ppg":
                 m = build_sigma_mart(
                     registry, split, out_root, task,
@@ -76,10 +80,10 @@ def cmd_mart(args: argparse.Namespace) -> int:
                 counts = {k: v["windows"] for k, v in m["splits"].items()}
             else:
                 m = build_opentslm_mart(
-                    registry, split, out_root, task, acc_mode=args.acc_mode, seed=args.seed,
+                    registry, split, out_root, task, acc_mode=args.acc_mode, seed=args.seed, signal=signal,
                 )
                 counts = {k: v["records"] for k, v in m["splits"].items()}
-            print(f"[mart] {model}/{task}: {counts} -> {out_root / task}")
+            print(f"[mart] {model}{suffix}/{task}: {counts} -> {out_root / task}")
     return 0
 
 
@@ -103,6 +107,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         raw_dir=args.raw_dir,
         limit=args.limit,
         include_acc=not args.no_acc,
+        include_ecg=args.with_ecg,
         skip_existing=not args.no_skip_existing,
         workers=args.workers,
     )
@@ -433,6 +438,8 @@ def build_parser() -> argparse.ArgumentParser:
     m.add_argument("--target-fs", type=float, default=50.0, help="SIGMA-PPG resample rate")
     m.add_argument("--normalize", choices=["zscore", "minmax"], default="zscore")
     m.add_argument("--acc-mode", choices=["none", "magnitude", "axes"], default="magnitude", help="OpenTSLM ACC")
+    m.add_argument("--signal", choices=["ppg", "ecg"], default="ppg",
+                   help="opentslm: 'ecg' builds the ECG-pretraining mart -> <out>/opentslm_ecg (section 6)")
     m.add_argument("--seed", type=int, default=42)
     m.set_defaults(func=cmd_mart)
 
@@ -444,6 +451,7 @@ def build_parser() -> argparse.ArgumentParser:
     ing.add_argument("--raw-dir", default=raw_default)
     ing.add_argument("--limit", type=int, default=None, help="only the first N records (smoke test)")
     ing.add_argument("--no-acc", action="store_true", help="skip accelerometer download")
+    ing.add_argument("--with-ecg", action="store_true", help="also download ECG (for OpenTSLM ECG-pretraining, section 6)")
     ing.add_argument("--no-skip-existing", action="store_true", help="re-download even if already cached")
     ing.add_argument("--workers", type=int, default=8, help="parallel download threads (latency-bound; try 16)")
     ing.set_defaults(func=cmd_ingest)
