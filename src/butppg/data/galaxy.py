@@ -208,6 +208,7 @@ def build_galaxy_registry(
             rows.append({
                 "record_id": record_id,
                 "subject_id": subject_id,
+                "dataset": "galaxy_ppg",
                 "activity": _activity_of(t0, events),
                 "quality_label": 1,          # placeholder; only HR is validated on GalaxyPPG
                 "hr_ref": float(hr),
@@ -215,6 +216,7 @@ def build_galaxy_registry(
                 "ppg_path": str(ppg_path),
                 "acc_path": "",
                 "measurement_site": "wrist",
+                "sex": "", "age": None, "height": None, "weight": None,
             })
 
     registry = pd.DataFrame(rows)

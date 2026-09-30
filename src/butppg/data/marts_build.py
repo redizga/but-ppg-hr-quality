@@ -230,7 +230,11 @@ def build_opentslm_mart(
     if task == "hr" and good_quality_only:
         registry = registry[registry["quality_label"] == 1]
     if signal == "ecg":
-        registry = registry[registry.get("has_ecg", False) == True]  # noqa: E712
+        if "has_ecg" not in registry.columns:
+            raise ValueError(
+                "registry has no 'has_ecg' column — run `orch ingest --with-ecg` then `orch process`"
+            )
+        registry = registry[registry["has_ecg"] == True]  # noqa: E712
 
     out_task = Path(out_root) / task
     out_task.mkdir(parents=True, exist_ok=True)

@@ -41,6 +41,10 @@ RECORD_COLUMNS = [
     "activity",
 ]
 
+# Optional columns kept on save when present (ECG for the OpenTSLM ECG-pretraining
+# stage — section 6). Not required, so datasets without them still validate.
+OPTIONAL_COLUMNS = ["has_ecg", "ecg_path"]
+
 # record_id/subject_id in BUT PPG look like plain numbers ("100001", "100") --
 # force string on read so they never get silently coerced to int64 and then
 # fail to match a (string) split file. Same fix as metrics/predictions.py;
@@ -69,7 +73,8 @@ def validate_registry(df: pd.DataFrame) -> None:
 def save_registry(df: pd.DataFrame, path: str | Path) -> Path:
     """Validate and write the registry (see module docstring for the schema)."""
     validate_registry(df)
-    df = df[RECORD_COLUMNS].copy()
+    cols = RECORD_COLUMNS + [c for c in OPTIONAL_COLUMNS if c in df.columns]
+    df = df[cols].copy()
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(path, index=False)
