@@ -19,6 +19,25 @@ ETL разделён на слои (`ingest` → `process` → `mart`), чтоб
 лёгкие baseline (trivial, 1D-CNN) гоняются где угодно, включая ноутбук.
 `OpenTSLM/` и `SigmaPPG/` — вендоренные апстрим-репозитории рядом с пакетом.
 
+## 🔁 Воспроизведение результатов (проверяющему)
+
+Итоговые таблицы пересобираются **без переобучения, без GPU и без датасета** —
+предсказания и метрики каждой модели уже в репозитории:
+
+```bash
+git clone https://github.com/redizga/but-ppg-hr-quality.git
+cd but-ppg-hr-quality
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e .                 # только ядро, без torch
+orch table                       # -> results/tables/comparison_*.{md,csv}
+orch cascade --quality-run baseline_features_quality_20260920-210038_1282 \
+             --hr-run      baseline_features_hr_20260920-210224_29b0   # -> results/tables/cascade_*.json
+```
+
+Подробно (в т.ч. скачивание весов и полное переобучение с нуля) —
+**[docs/EVALUATE.md](docs/EVALUATE.md)**. Развёртывание на GPU-сервере —
+**[docs/DEPLOY.md](docs/DEPLOY.md)**.
+
 ## Установка
 
 ```bash

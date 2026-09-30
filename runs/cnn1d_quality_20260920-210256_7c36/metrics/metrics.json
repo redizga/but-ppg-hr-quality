@@ -1,0 +1,42 @@
+{
+  "file": "/workspace/but-ppg-hr-quality/runs/cnn1d_quality_20260920-210256_7c36/predictions/test_predictions.csv",
+  "task": "quality",
+  "n_records": 751,
+  "n_scored": 751,
+  "n_invalid_responses": 0,
+  "invalid_response_fraction": 0.0,
+  "metrics": {
+    "n": 751,
+    "macro_f1": 0.627864512625577,
+    "accuracy": 0.8055925432756325,
+    "per_class": {
+      "0": {
+        "precision": 0.8554033485540334,
+        "recall": 0.9168026101141925,
+        "f1": 0.8850393700787401,
+        "support": 613
+      },
+      "1": {
+        "precision": 0.4574468085106383,
+        "recall": 0.3115942028985507,
+        "f1": 0.3706896551724138,
+        "support": 138
+      }
+    },
+    "confusion_matrix": [
+      [
+        562,
+        51
+      ],
+      [
+        95,
+        43
+      ]
+    ],
+    "confusion_matrix_labels": [
+      "bad",
+      "good"
+    ],
+    "roc_auc": 0.6719566399508239
+  }
+}

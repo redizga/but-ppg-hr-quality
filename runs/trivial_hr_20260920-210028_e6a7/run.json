@@ -1,0 +1,28 @@
+{
+  "run_id": "trivial_hr_20260920-210028_e6a7",
+  "model": "trivial",
+  "task": "hr",
+  "status": "finished",
+  "created_at": "2026-09-20T21:00:28.773631+00:00",
+  "updated_at": "2026-09-20T21:00:30.916634+00:00",
+  "config": {
+    "registry": "/workspace/but-ppg-hr-quality/data/processed/registry.csv",
+    "split": "/workspace/but-ppg-hr-quality/splits/but_ppg_60_20_20.json",
+    "device": "cpu",
+    "train": {
+      "epochs": 30,
+      "batch_size": 32,
+      "lr": 0.001
+    },
+    "method": "median"
+  },
+  "mart_dir": null,
+  "device": "cpu",
+  "best_checkpoint": null,
+  "metrics": {
+    "n": 138,
+    "mae": 11.956521739130435,
+    "rmse": 16.071849545901273
+  },
+  "error": null
+}

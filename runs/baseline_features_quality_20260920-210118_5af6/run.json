@@ -1,0 +1,58 @@
+{
+  "run_id": "baseline_features_quality_20260920-210118_5af6",
+  "model": "baseline_features",
+  "task": "quality",
+  "status": "finished",
+  "created_at": "2026-09-20T21:01:18.123231+00:00",
+  "updated_at": "2026-09-20T21:02:23.737695+00:00",
+  "config": {
+    "registry": "/workspace/but-ppg-hr-quality/data/processed/registry.csv",
+    "split": "/workspace/but-ppg-hr-quality/splits/but_ppg_60_20_20.json",
+    "device": "cpu",
+    "train": {
+      "epochs": 30,
+      "batch_size": 32,
+      "lr": 0.001
+    },
+    "input_variant": "ppg_acc_cov",
+    "estimator": "xgboost"
+  },
+  "mart_dir": null,
+  "device": "cpu",
+  "best_checkpoint": "/workspace/but-ppg-hr-quality/runs/baseline_features_quality_20260920-210118_5af6/checkpoints/model.joblib",
+  "metrics": {
+    "n": 743,
+    "macro_f1": 0.6170834639766751,
+    "accuracy": 0.8075370121130552,
+    "per_class": {
+      "0": {
+        "precision": 0.8554033485540334,
+        "recall": 0.921311475409836,
+        "f1": 0.8871349644830308,
+        "support": 610
+      },
+      "1": {
+        "precision": 0.4418604651162791,
+        "recall": 0.2857142857142857,
+        "f1": 0.3470319634703196,
+        "support": 133
+      }
+    },
+    "confusion_matrix": [
+      [
+        562,
+        48
+      ],
+      [
+        95,
+        38
+      ]
+    ],
+    "confusion_matrix_labels": [
+      "bad",
+      "good"
+    ],
+    "roc_auc": 0.6843954147664243
+  },
+  "error": null
+}

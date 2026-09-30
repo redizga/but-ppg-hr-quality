@@ -1,0 +1,63 @@
+{
+  "run_id": "cnn1d_quality_20260920-210256_7c36",
+  "model": "cnn1d",
+  "task": "quality",
+  "status": "finished",
+  "created_at": "2026-09-20T21:02:56.272796+00:00",
+  "updated_at": "2026-09-20T21:03:51.733757+00:00",
+  "config": {
+    "registry": "/workspace/but-ppg-hr-quality/data/processed/registry.csv",
+    "split": "/workspace/but-ppg-hr-quality/splits/but_ppg_60_20_20.json",
+    "device": "cuda",
+    "train": {
+      "epochs": 30,
+      "batch_size": 32,
+      "lr": 0.001
+    },
+    "model": {
+      "arch": "resnet1d",
+      "channels": [
+        "ppg"
+      ]
+    },
+    "input_variant": "ppg"
+  },
+  "mart_dir": null,
+  "device": "cuda",
+  "best_checkpoint": "/workspace/but-ppg-hr-quality/runs/cnn1d_quality_20260920-210256_7c36/checkpoints/best_model.pt",
+  "metrics": {
+    "n": 751,
+    "macro_f1": 0.627864512625577,
+    "accuracy": 0.8055925432756325,
+    "per_class": {
+      "0": {
+        "precision": 0.8554033485540334,
+        "recall": 0.9168026101141925,
+        "f1": 0.8850393700787401,
+        "support": 613
+      },
+      "1": {
+        "precision": 0.4574468085106383,
+        "recall": 0.3115942028985507,
+        "f1": 0.3706896551724138,
+        "support": 138
+      }
+    },
+    "confusion_matrix": [
+      [
+        562,
+        51
+      ],
+      [
+        95,
+        43
+      ]
+    ],
+    "confusion_matrix_labels": [
+      "bad",
+      "good"
+    ],
+    "roc_auc": 0.6719566399508239
+  },
+  "error": null
+}

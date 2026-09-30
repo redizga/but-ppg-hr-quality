@@ -1,0 +1,13 @@
+{
+  "file": "/workspace/but-ppg-hr-quality/runs/baseline_features_hr_20260920-210234_1342/predictions/test_predictions.csv",
+  "task": "hr",
+  "n_records": 133,
+  "n_scored": 133,
+  "n_invalid_responses": 0,
+  "invalid_response_fraction": 0.0,
+  "metrics": {
+    "n": 133,
+    "mae": 11.170712406473948,
+    "rmse": 14.573049210793208
+  }
+}

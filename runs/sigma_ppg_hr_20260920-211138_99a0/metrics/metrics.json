@@ -1,0 +1,13 @@
+{
+  "file": "/workspace/but-ppg-hr-quality/runs/sigma_ppg_hr_20260920-211138_99a0/predictions/test_predictions.csv",
+  "task": "hr",
+  "n_records": 138,
+  "n_scored": 138,
+  "n_invalid_responses": 0,
+  "invalid_response_fraction": 0.0,
+  "metrics": {
+    "n": 138,
+    "mae": 11.760344949275362,
+    "rmse": 15.720649653619926
+  }
+}

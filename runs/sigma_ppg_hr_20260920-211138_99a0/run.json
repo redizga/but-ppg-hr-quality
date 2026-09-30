@@ -1,0 +1,30 @@
+{
+  "run_id": "sigma_ppg_hr_20260920-211138_99a0",
+  "model": "sigma_ppg",
+  "task": "hr",
+  "status": "finished",
+  "created_at": "2026-09-20T21:11:38.424828+00:00",
+  "updated_at": "2026-09-20T21:12:25.977645+00:00",
+  "config": {
+    "registry": "/workspace/but-ppg-hr-quality/data/processed/registry.csv",
+    "split": "/workspace/but-ppg-hr-quality/splits/but_ppg_60_20_20.json",
+    "device": "cuda",
+    "train": {
+      "epochs": 30,
+      "batch_size": 32,
+      "lr": 0.001
+    },
+    "mart_dir": "/workspace/but-ppg-hr-quality/artifacts/data_marts/sigma_ppg",
+    "checkpoint_path": "/workspace/sigma.pth",
+    "target_fs": 50.0
+  },
+  "mart_dir": null,
+  "device": "cuda",
+  "best_checkpoint": "/workspace/but-ppg-hr-quality/runs/sigma_ppg_hr_20260920-211138_99a0/checkpoints/best_model.pt",
+  "metrics": {
+    "n": 138,
+    "mae": 11.760344949275362,
+    "rmse": 15.720649653619926
+  },
+  "error": null
+}

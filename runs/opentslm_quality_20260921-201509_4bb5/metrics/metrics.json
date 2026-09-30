@@ -1,0 +1,42 @@
+{
+  "file": "/workspace/but-ppg-hr-quality/runs/opentslm_quality_20260921-201509_4bb5/predictions/test_predictions.csv",
+  "task": "quality",
+  "n_records": 751,
+  "n_scored": 751,
+  "n_invalid_responses": 0,
+  "invalid_response_fraction": 0.0,
+  "metrics": {
+    "n": 751,
+    "macro_f1": 0.44941348973607037,
+    "accuracy": 0.8162450066577897,
+    "per_class": {
+      "0": {
+        "precision": 0.8162450066577897,
+        "recall": 1.0,
+        "f1": 0.8988269794721407,
+        "support": 613
+      },
+      "1": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 138
+      }
+    },
+    "confusion_matrix": [
+      [
+        613,
+        0
+      ],
+      [
+        138,
+        0
+      ]
+    ],
+    "confusion_matrix_labels": [
+      "bad",
+      "good"
+    ],
+    "roc_auc": null
+  }
+}

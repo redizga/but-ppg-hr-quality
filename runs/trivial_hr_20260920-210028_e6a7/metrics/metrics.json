@@ -1,0 +1,13 @@
+{
+  "file": "/workspace/but-ppg-hr-quality/runs/trivial_hr_20260920-210028_e6a7/predictions/test_predictions.csv",
+  "task": "hr",
+  "n_records": 138,
+  "n_scored": 138,
+  "n_invalid_responses": 0,
+  "invalid_response_fraction": 0.0,
+  "metrics": {
+    "n": 138,
+    "mae": 11.956521739130435,
+    "rmse": 16.071849545901273
+  }
+}
