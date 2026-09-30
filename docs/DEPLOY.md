@@ -44,7 +44,7 @@ nvidia-smi
 
 ```bash
 mkdir -p /root/.ssh && chmod 700 /root/.ssh
-ssh-keygen -t ed25519 -C "rsclashgml@gmail.com" -f /root/.ssh/id_ed25519 -N ""
+ssh-keygen -t ed25519 -C "you@example.com" -f /root/.ssh/id_ed25519 -N ""
 chmod 600 /root/.ssh/id_ed25519
 cat /root/.ssh/id_ed25519.pub
 ```
@@ -85,7 +85,7 @@ git checkout golikov/2026-09-14
 ```bash
 git config core.sshCommand "ssh -i /root/.ssh/id_ed25519 -o IdentitiesOnly=yes"
 git config user.name  "redizga"
-git config user.email "rsclashgml@gmail.com"
+git config user.email "you@example.com"
 git pull   # проверка, что тянет
 ```
 

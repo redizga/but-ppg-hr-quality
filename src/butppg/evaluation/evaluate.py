@@ -22,6 +22,18 @@ from typing import Any
 from butppg.metrics.hr import hr_metrics
 from butppg.metrics.predictions import load_predictions
 from butppg.metrics.quality import quality_metrics
+from butppg.paths import PROJECT_ROOT
+
+
+def _rel(path: str | Path) -> str:
+    """Path relative to the project root (POSIX), so saved reports are portable
+    and reproduce byte-for-byte on another machine. Absolute paths outside the
+    project are kept as-is."""
+    p = Path(path)
+    try:
+        return p.resolve().relative_to(PROJECT_ROOT.resolve()).as_posix()
+    except ValueError:
+        return str(path)
 
 
 def evaluate_prediction_file(path: str | Path) -> dict[str, Any]:
@@ -57,7 +69,7 @@ def evaluate_prediction_file(path: str | Path) -> dict[str, Any]:
         raise ValueError(f"Unknown task {task!r}")
 
     return {
-        "file": str(path),
+        "file": _rel(path),
         "task": task,
         "n_records": len(df),
         "n_scored": len(scored),
@@ -110,8 +122,8 @@ def evaluate_pipeline(quality_path: str | Path, hr_path: str | Path) -> dict[str
     )
 
     return {
-        "quality_file": str(quality_path),
-        "hr_file": str(hr_path),
+        "quality_file": _rel(quality_path),
+        "hr_file": _rel(hr_path),
         "n_windows": len(merged),
         "n_accepted": int(accepted.sum()),
         "accepted_fraction": accepted_fraction,
@@ -140,7 +152,7 @@ def cascade_report(quality_path: str | Path, hr_path: str | Path | None = None) 
     truly_good = q["y_true"] == 1
     truly_bad = q["y_true"] == 0
     result: dict[str, Any] = {
-        "quality_file": str(quality_path),
+        "quality_file": _rel(quality_path),
         "n_test": int(len(q)),
         "n_accepted": int(accepted.sum()),
         "accepted_fraction": float(accepted.mean()),
@@ -151,7 +163,7 @@ def cascade_report(quality_path: str | Path, hr_path: str | Path | None = None) 
         hr = load_predictions(hr_path)
         accepted_ids = set(q.loc[accepted, "record_id"])
         gated = hr[hr["record_id"].isin(accepted_ids)]
-        result["hr_file"] = str(hr_path)
+        result["hr_file"] = _rel(hr_path)
         result["hr_windows_scored"] = int(len(gated))
         result["hr_metrics_on_accepted"] = hr_metrics(gated["y_true"], gated["y_pred"]) if len(gated) else None
     return result
