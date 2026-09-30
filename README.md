@@ -10,7 +10,11 @@ CLI-оркестратор для воспроизводимого исслед�
 | `orch process` | RAW → **обработанные окна + реестр + split** (быстро, локально, без сети) |
 | `orch mart` | реестр → входные **витрины** для SIGMA-PPG и/или OpenTSLM |
 | `orch train` | запускает **обучение** одной модели на одной задаче → `runs/<id>/` |
+| `orch predict` | **инференс из весов** обученного прогона на новых данных (section 8) |
 | `orch results` | **результат**: метрики запусков и выгрузка обученных весов |
+| `orch galaxy` / `orch activity-report` | внешняя проверка на **GalaxyPPG** (section 8) |
+| `orch lowdata-subsets` / `orch lowdata-table` | **low-data** эксперимент (section 9) |
+| `orch cascade` / `orch table` | каскад quality→HR и итоговые таблицы (section 2Б, 10) |
 
 ETL разделён на слои (`ingest` → `process` → `mart`), чтобы повторный прогон
 обработки (смена канала PPG, параметров окна) не тянул датасет заново из сети.
@@ -45,6 +49,8 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e .                 # ядро (numpy/scipy/pandas/sklearn)
 pip install -e ".[data]"         # wfdb — для загрузки BUT PPG
 pip install -e ".[deep]"         # torch + einops — CNN / SIGMA-PPG / OpenTSLM
+pip install -e ".[galaxy]"       # neurokit2 — эталонный HR из ECG (GalaxyPPG, section 8)
+pip install -e ".[viz]"          # matplotlib — графики (low-data кривые, section 9)
 ```
 
 После установки доступна команда `orch` (или `python -m butppg.orchestrator.cli`).
@@ -170,6 +176,64 @@ orch table
 Собирает из готовых запусков основную таблицу «только PPG» (все модели ×
 Quality/HR) и таблицу расширенных входов (Quality Macro-F1 по вариантам
 PPG / PPG+ACC / PPG+ACC+cov). Пишет Markdown + CSV в `results/tables/`.
+
+## 6. OpenTSLM: перенос ECG→PPG (section 6)
+
+Два запуска OpenTSLM: без ECG-инициализации и с ней. ECG-стадию предобучаем сами
+на ECG-сигнале BUT PPG (задача HR), затем дообучаем на PPG с этого чекпойнта.
+
+```bash
+orch ingest --with-ecg                       # докачать ECG в data/raw/ecg
+orch process                                 # добавит ecg_path + окна 30Гц в реестр
+orch mart --model opentslm --signal ecg --task hr   # ECG-витрина -> data_marts/opentslm_ecg
+# ECG-стадия (предобучение):
+orch train --model opentslm --task hr --device cuda --llm-id llama-3b \
+    --mart-dir artifacts/data_marts/opentslm_ecg --epochs 5
+# PPG-стадия с ECG-инициализацией (перенос):
+orch train --model opentslm --task quality --device cuda --llm-id llama-3b \
+    --ecg-init runs/<ECG_RUN_ID>/checkpoints/best_model.pt
+orch train --model opentslm --task hr      --device cuda --llm-id llama-3b \
+    --ecg-init runs/<ECG_RUN_ID>/checkpoints/best_model.pt
+```
+
+## 7. `orch predict` — запуск обученной модели из весов (section 8)
+
+Загружает веса завершённого прогона и предсказывает на новых данных **без
+дообучения** (нужно для внешней проверки). Пишет новый прогон с предсказаниями и
+метриками — его подхватывают `orch results`/`table`.
+
+```bash
+orch predict --run <RUN_ID>                              # воспроизвести тест BUT PPG из весов
+orch predict --run <RUN_ID> --registry data/galaxy/registry.csv   # на GalaxyPPG (registry-модели)
+orch predict --run <RUN_ID> --mart-dir data_marts/galaxy_opentslm # на GalaxyPPG (mart-модели)
+```
+
+## 8. Внешняя проверка на GalaxyPPG (section 8)
+
+```bash
+# 1) скачать GalaxyPPG (Zenodo 10.5281/zenodo.14635823), распаковать в <galaxy_raw>
+orch galaxy --raw-dir <galaxy_raw> --out data/galaxy    # реестр + инверсия PPG + HR из ECG
+# 2) прогнать HR-модели на GalaxyPPG (пример для features):
+orch predict --run <features_hr_RUN> --registry data/galaxy/registry.csv --tag galaxy
+# 3) отчёт по активностям (walking/jogging/running отдельно):
+orch activity-report --hr-run <galaxy_predict_RUN> --registry data/galaxy/registry.csv \
+    --quality-run <galaxy_quality_predict_RUN>
+```
+Даёт `results/tables/galaxy_activity.md` (общий MAE/RMSE + по активностям + доля
+принятых quality-классификатором) и `results/figures/galaxy_activities.png`.
+
+## 9. Low-data эксперимент (section 9)
+
+```bash
+# 1) вложенные подмножества train 25/50/100%, ≥3 seed (val/test фиксированы):
+orch lowdata-subsets --fractions 0.25,0.5,1.0 --seeds 0,1,2 --out splits/lowdata
+# 2) обучить каждую модель на каждом split-файле (features/cnn/sigma/opentslm±ECG):
+orch train --model baseline_features --task quality --split splits/lowdata/f25_s0.json
+#   ... (цикл по моделям × split-файлам, см. docs/DEPLOY.md) ...
+# 3) агрегировать в кривые mean±std (Macro-F1/MAE vs N) + таблицы:
+orch lowdata-table
+```
+Даёт `results/tables/lowdata_main.{md,csv}` и кривые `results/figures/lowdata_*.png`.
 
 ## Как устроены витрины (BUT PPG → вход модели)
 

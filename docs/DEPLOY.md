@@ -262,6 +262,73 @@ deactivate
 
 ---
 
+### 5.6 OpenTSLM: перенос ECG→PPG (section 6, второй запуск)
+
+ECG-стадию предобучаем сами на ECG-сигнале BUT PPG, затем дообучаем PPG с неё.
+Всё в venv312.
+
+```bash
+orch ingest --with-ecg                      # докачать ECG (data/raw/ecg)
+orch process                                # + ecg_path/ecg-окна в реестр
+orch mart --model opentslm --signal ecg --task hr   # ECG-витрина -> data_marts/opentslm_ecg
+orch train --model opentslm --task hr --device cuda --llm-id llama-3b \
+    --mart-dir artifacts/data_marts/opentslm_ecg --epochs 5          # ECG-стадия
+ECG=runs/<ECG_RUN_ID>/checkpoints/best_model.pt
+orch train --model opentslm --task quality --device cuda --llm-id llama-3b --ecg-init $ECG
+orch train --model opentslm --task hr      --device cuda --llm-id llama-3b --ecg-init $ECG
+```
+> `--ecg-init` грузит наш компактный чекпойнт (одинаковая длина окна на обеих
+> стадиях → обучаемые слои совпадают по именам). Помни: у OpenTSLM оптимум ~5
+> эпох (10+ вырождает генерацию).
+
+### 5.7 GalaxyPPG — внешняя проверка (section 8, GPU для sigma/opentslm)
+
+```bash
+pip install -e ".[galaxy]"      # neurokit2 (эталонный HR из ECG)
+# 1) скачать GalaxyPPG (Zenodo 10.5281/zenodo.14635823) в /workspace/galaxy_raw и распаковать
+python -c "import zenodo_get" 2>/dev/null || pip install zenodo_get
+zenodo_get 10.5281/zenodo.14635823 -o /workspace/galaxy_zip && \
+    (cd /workspace && mkdir -p galaxy_raw && unzip -q 'galaxy_zip/*.zip' -d galaxy_raw)
+# 2) ETL: реестр + инверсия PPG + HR из ECG + метки активностей
+orch galaxy --raw-dir /workspace/galaxy_raw --out data/galaxy
+# 3) для sigma/opentslm — построить GalaxyPPG-витрины на all-test split:
+orch mart --model sigma_ppg --registry data/galaxy/registry.csv --split data/galaxy/galaxy_all_test.json --out data/galaxy/marts
+orch mart --model opentslm --registry data/galaxy/registry.csv --split data/galaxy/galaxy_all_test.json --out data/galaxy/marts --acc-mode none
+# 4) прогнать обученные модели (пример features + sigma HR):
+orch predict --run <features_hr_RUN>  --registry data/galaxy/registry.csv --tag galaxy
+orch predict --run <sigma_ppg_hr_RUN> --mart-dir data/galaxy/marts/sigma_ppg --tag galaxy
+# нужен и quality-прогон на GalaxyPPG для accept-fraction:
+orch predict --run <features_quality_RUN> --registry data/galaxy/registry.csv --tag galaxy
+# 5) отчёт по активностям:
+orch activity-report --hr-run <galaxy_hr_predict_RUN> --registry data/galaxy/registry.csv \
+    --quality-run <galaxy_quality_predict_RUN>
+```
+> Столбцы CSV в релизе GalaxyPPG могут отличаться — если ETL находит мало окон,
+> проверь `data/galaxy/registry.csv` и при необходимости поправь `COLS` в
+> `src/butppg/data/galaxy.py` (детект имён колонок). Mart-модели на GalaxyPPG
+> используют all-test split (train/val пустые).
+
+### 5.8 Low-data эксперимент (section 9, много GPU-прогонов)
+
+```bash
+pip install -e ".[viz]"         # matplotlib (кривые)
+orch lowdata-subsets --fractions 0.25,0.5,1.0 --seeds 0,1,2 --out splits/lowdata
+# обучить все модели на всех split-файлах (PPG-only). Пример цикла для лёгких моделей:
+for f in splits/lowdata/*.json; do
+  orch train --model baseline_features --task quality --split "$f"
+  orch train --model baseline_features --task hr      --split "$f"
+  orch train --model cnn1d --task quality --device cuda --split "$f" --epochs 30
+  orch train --model cnn1d --task hr      --device cuda --split "$f" --epochs 30
+done
+# SIGMA и OpenTSLM (±ECG) — аналогично, но дороже; для 100% достаточно 1 seed, для 25/50% — ≥3.
+orch lowdata-table              # -> results/tables/lowdata_main.{md,csv} + figures/lowdata_*.png
+```
+> Прогонов много (fractions × seeds × модели). Начни с лёгких (features/CNN),
+> потом SIGMA, потом OpenTSLM. `orch lowdata-table` берёт из split-файла блок
+> `low_data` (fraction/seed), поэтому агрегация mean±std делается автоматически.
+
+---
+
 ## 6. Сводка результатов
 
 ```bash
